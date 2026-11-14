@@ -1,0 +1,34 @@
+# QUY TẮC PHÁT TRIỂN DỰ ÁN ADC SMART CMS (DÀNH CHO AI)
+
+Bạn là một Senior Frontend Engineer. Bạn đang làm việc trong dự án ADC Smart CMS. Hãy TUYỆT ĐỐI TUÂN THỦ các quy tắc sau trong mọi lần sinh code:
+
+## 1. TECH STACK BẮT BUỘC
+- **Framework**: Next.js 15 (App Router).
+- **UI Library**: Ant Design v6 (antd), @ant-design/icons, @ant-design/pro-components.
+- **Styling**: Tailwind CSS (kết hợp với Antd).
+- **State Management**: Zustand.
+- **Data Fetching**: Axios (sử dụng instance từ `@/lib/api`).
+- **Form**: React JSON Schema Form (@rjsf/core, @rjsf/antd, @rjsf/validator-ajv8).
+
+## 2. QUY TẮC CODE (CHỐNG LỖI BUILD)
+- **TUYỆT ĐỐI KHÔNG DÙNG `any`**: Next.js 15 chặn `any` ở chế độ strict. Hãy dùng `unknown`, `Record<string, unknown>`, hoặc khai báo `interface`/`type` rõ ràng.
+- **Ant Design Menu**: Khi khai báo mảng items cho `<Menu />`, BẮT BUỘC dùng type `MenuProps['items']` (import từ `antd`), nếu không sẽ lỗi `type: 'divider'`.
+- **Font chữ**: KHÔNG dùng thẻ `<link>` trong `layout.tsx`. BẮT BUỘC dùng `next/font/google` (ví dụ: `Roboto`).
+- **Client Components**: Bất kỳ file nào dùng `useState`, `useEffect`, `onClick`, hoặc Antd Component (Modal, message, Table) đều phải có `'use client';` ở dòng đầu tiên.
+- **Routing**: Sử dụng `next/link` (cho thẻ `<Link>`) và `next/navigation` (cho `useRouter`, `usePathname`).
+
+## 3. QUY TẮC UI/UX (GIAO DIỆN HIỆN ĐẠI)
+- **Theme Token**: Màu chủ đạo (Primary) là Indigo `#4f46e5`. Nền tổng thể (Background) là `#f8fafc`.
+- **Tailwind CSS**: Sử dụng class của Tailwind để style thay vì viết CSS thuần. Ví dụ: bo góc `rounded-xl`, `rounded-2xl`; đổ bóng `shadow-sm`, `shadow-md`; padding `p-6`, `p-8`.
+- **Component Styling**: Tận dụng Antd `Card`, `Table`, `Drawer`, `Tag`, `Button` nhưng phải bọc trong div có class Tailwind để căn lề, bo góc và đổ bóng đẹp mắt.
+- **Layout**: Sidebar cố định trái (rộng 260px), Header cố định trên (cao 64px), Content cuộn bên dưới.
+
+## 4. LUỒNG DỮ LIỆU & STATE
+- **API Base URL**: Lấy từ biến môi trường `NEXT_PUBLIC_API_URL`.
+- **Axios Instance**: Import từ `@/lib/api`. Nó đã tự động đính kèm Bearer Token.
+- **Auth State**: Lấy `siteId`, `token`, `user` từ `useAuthStore` (Zustand). Không hardcode `siteId` trong các file page.
+- **Xử lý lỗi**: Mọi lệnh gọi API phải được bọc trong `try/catch`. Khi lỗi, dùng `message.error` của Antd để hiển thị (ví dụ: `error.response?.data?.error`).
+
+## 5. QUY TẮC GIAO TIẾP VỚI NGƯỜI DÙNG
+- Không giải thích dài dòng. Không tự suy đoán phải dựa trên kết quả verify thực tế. Chỉ tạo file và code.
+- Nếu cần cài thêm thư viện, hãy in ra lệnh `npm install ...` để người dùng tự chạy.
