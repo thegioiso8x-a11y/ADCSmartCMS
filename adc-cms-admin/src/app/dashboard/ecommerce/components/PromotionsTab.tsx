@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Table, Tag, Button, Modal, Form, Input, InputNumber, Select, Switch, Space, message, Empty,
   Popconfirm, DatePicker, Alert, Divider, Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined, DeleteOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined, DeleteOutlined, CheckCircleOutlined, ReloadOutlined, EditOutlined,
+} from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -17,7 +19,7 @@ const { Text } = Typography;
 // Types (khớp DTO backend .NET)
 // ============================================================================
 
-/** POST /api/ecommerce/promotions -> PromotionResult */
+/** GET /api/ecommerce/promotions -> PromotionListItemDto */
 export interface Promotion {
   id: string;
   siteId: string;
@@ -25,7 +27,10 @@ export interface Promotion {
   title: string;
   discountType: string;
   discountValue: number;
+  maxDiscountAmount?: number | null;
   minOrderAmount: number;
+  usageLimit?: number | null;
+  usedCount: number;
   startAt: string;
   endAt?: string | null;
   isActive: boolean;
@@ -57,6 +62,13 @@ interface ValidateFormValues {
   orderAmount: number;
 }
 
+/** PUT /api/ecommerce/promotions/{promoId} — chỉ 3 trường backend hỗ trợ. */
+interface EditPromotionFormValues {
+  title: string;
+  discountValue: number;
+  isActive: boolean;
+}
+
 // ============================================================================
 // Hằng số
 // ============================================================================
@@ -67,33 +79,18 @@ const DISCOUNT_TYPE_OPTIONS = [
   { label: 'free_shipping', value: 'free_shipping' },
 ];
 
-/** Mock data mã giảm giá (thay bằng API GET khi backend bổ sung). */
-const MOCK_PROMOTIONS: Promotion[] = [
-  {
-    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    siteId: '',
-    couponCode: 'SALE10',
-    title: 'Giảm 10% toàn bộ đơn hàng',
-    discountType: 'percentage',
-    discountValue: 10,
-    minOrderAmount: 500000,
-    startAt: '2026-10-01T00:00:00+07:00',
-    endAt: '2026-12-31T23:59:59+07:00',
-    isActive: true,
-  },
-  {
-    id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    siteId: '',
-    couponCode: 'FREESHIP',
-    title: 'Miễn phí vận chuyển',
-    discountType: 'free_shipping',
-    discountValue: 0,
-    minOrderAmount: 300000,
-    startAt: '2026-10-01T00:00:00+07:00',
-    endAt: null,
-    isActive: true,
-  },
-];
+/** Chuẩn hóa response danh sách mã giảm giá về Promotion[] an toàn. */
+function toPromotionArray(data: unknown): Promotion[] {
+  if (Array.isArray(data)) return data as Promotion[];
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    for (const key of ['items', 'promotions', 'data', 'result']) {
+      const v = obj[key];
+      if (Array.isArray(v)) return v as Promotion[];
+    }
+  }
+  return [];
+}
 
 /** Định dạng tiền VNĐ. */
 function formatVnd(value: number): string {
@@ -108,7 +105,8 @@ export default function PromotionsTab() {
   const siteId = useAuthStore((state) => state.siteId);
 
   // ----- Danh sách mã giảm giá -----
-  const [promotions, setPromotions] = useState<Promotion[]>(MOCK_PROMOTIONS);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // ----- Modal Tạo mới -----
   const [promoModalOpen, setPromoModalOpen] = useState(false);
@@ -120,6 +118,32 @@ export default function PromotionsTab() {
   const [validateSubmitting, setValidateSubmitting] = useState(false);
   const [validateResult, setValidateResult] = useState<ValidatePromotionResult | null>(null);
   const [validateForm] = Form.useForm<ValidateFormValues>();
+
+  // ----- Modal Sửa -----
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editForm] = Form.useForm<EditPromotionFormValues>();
+
+  /** Tải danh sách mã giảm giá (GET /api/ecommerce/promotions). */
+  const loadPromotions = useCallback(async () => {
+    if (!siteId) return;
+    setLoading(true);
+    try {
+      const res = await api.get<unknown>('/api/ecommerce/promotions', { params: { siteId } });
+      setPromotions(toPromotionArray(res.data));
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } };
+      message.error(e?.response?.data?.error || 'Không tải được danh sách mã giảm giá');
+      setPromotions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [siteId]);
+
+  useEffect(() => {
+    loadPromotions();
+  }, [loadPromotions]);
 
   /** Mở Modal tạo mã giảm giá. */
   const openCreatePromotion = () => {
@@ -152,7 +176,7 @@ export default function PromotionsTab() {
 
     setPromoSubmitting(true);
     try {
-      const res = await api.post<Promotion>('/api/ecommerce/promotions', {
+      await api.post('/api/ecommerce/promotions', {
         siteId,
         couponCode: values.couponCode.trim(),
         title: values.title.trim(),
@@ -166,9 +190,8 @@ export default function PromotionsTab() {
         isActive: values.isActive,
       });
       message.success('Tạo mã giảm giá thành công');
-      // Backend chưa có GET danh sách -> thêm vào state cục bộ.
-      setPromotions((prev) => [res.data, ...prev]);
       setPromoModalOpen(false);
+      await loadPromotions();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
       message.error(e?.response?.data?.error || 'Tạo mã giảm giá thất bại');
@@ -177,12 +200,52 @@ export default function PromotionsTab() {
     }
   };
 
+  /** Mở Modal sửa mã giảm giá. */
+  const openEditPromotion = (record: Promotion) => {
+    setEditingPromotion(record);
+    editForm.setFieldsValue({
+      title: record.title,
+      discountValue: record.discountValue,
+      isActive: record.isActive,
+    });
+    setEditModalOpen(true);
+  };
+
+  /** Submit sửa mã giảm giá (PUT /api/ecommerce/promotions/{promoId}). */
+  const handleSubmitEditPromotion = async () => {
+    if (!editingPromotion) return;
+    let values: EditPromotionFormValues;
+    try {
+      values = await editForm.validateFields();
+    } catch {
+      return;
+    }
+
+    setEditSubmitting(true);
+    try {
+      await api.put(`/api/ecommerce/promotions/${editingPromotion.id}`, {
+        title: values.title.trim(),
+        discountValue: values.discountValue,
+        isActive: values.isActive,
+      });
+      message.success('Cập nhật mã giảm giá thành công');
+      setEditModalOpen(false);
+      setEditingPromotion(null);
+      await loadPromotions();
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } };
+      message.error(e?.response?.data?.error || 'Cập nhật mã giảm giá thất bại');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   /** Xóa mã giảm giá (DELETE /api/ecommerce/promotions/{promoId}). */
   const handleDeletePromotion = async (record: Promotion) => {
     try {
       await api.delete(`/api/ecommerce/promotions/${record.id}`);
       message.success('Đã xóa mã giảm giá');
-      setPromotions((prev) => prev.filter((p) => p.id !== record.id));
+      await loadPromotions();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
       message.error(e?.response?.data?.error || 'Xóa thất bại');
@@ -296,10 +359,18 @@ export default function PromotionsTab() {
     {
       title: 'Thao tác',
       key: 'action',
-      width: 220,
+      width: 280,
       align: 'right',
       render: (_, record) => (
         <Space size="small">
+          <Button
+            type="link"
+            icon={<EditOutlined />}
+            className="font-medium"
+            onClick={() => openEditPromotion(record)}
+          >
+            Sửa
+          </Button>
           <Button
             type="link"
             icon={<CheckCircleOutlined />}
@@ -329,7 +400,7 @@ export default function PromotionsTab() {
       <Alert
         type="info"
         showIcon
-        message="Backend chưa có API GET danh sách mã giảm giá — bảng đang dùng dữ liệu mock. Tạo mới và Xóa gọi API thật; 'Thử mã' gọi POST /api/ecommerce/promotions/validate."
+        message="Danh sách mã giảm giá tải từ GET /api/ecommerce/promotions. Tạo mới, Xóa và 'Thử mã' (validate) đều gọi API thật."
         className="rounded-xl"
       />
 
@@ -351,6 +422,9 @@ export default function PromotionsTab() {
           >
             Kiểm tra mã bất kỳ
           </Button>
+          <Button icon={<ReloadOutlined />} onClick={loadPromotions} loading={loading} className="rounded-lg">
+            Tải lại
+          </Button>
         </Space>
       </div>
 
@@ -359,7 +433,8 @@ export default function PromotionsTab() {
         <Table<Promotion>
           rowKey="id"
           columns={promotionColumns}
-          dataSource={promotions}
+          dataSource={Array.isArray(promotions) ? promotions : []}
+          loading={loading}
           pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `Tổng ${t} mã` }}
           locale={{ emptyText: <Empty description="Chưa có mã giảm giá nào" /> }}
         />
@@ -428,6 +503,55 @@ export default function PromotionsTab() {
               format="DD/MM/YYYY HH:mm"
             />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Modal Sửa mã giảm giá */}
+      <Modal
+        title={<span className="font-semibold">Sửa mã giảm giá</span>}
+        open={editModalOpen}
+        onCancel={() => {
+          setEditModalOpen(false);
+          setEditingPromotion(null);
+        }}
+        onOk={handleSubmitEditPromotion}
+        confirmLoading={editSubmitting}
+        okText="Lưu thay đổi"
+        cancelText="Hủy"
+        width={560}
+        destroyOnHidden
+      >
+        {editingPromotion ? (
+          <div className="mb-4 rounded-lg bg-slate-50 border border-slate-200 p-3">
+            <div className="text-xs text-slate-500">Mã giảm giá (không thể đổi)</div>
+            <div className="font-mono font-semibold text-indigo-600">{editingPromotion.couponCode}</div>
+            <div className="mt-1 text-xs text-slate-500">
+              Loại: <Text strong>{editingPromotion.discountType}</Text>
+            </div>
+          </div>
+        ) : null}
+
+        <Form form={editForm} layout="vertical" requiredMark="optional">
+          <Form.Item
+            name="title"
+            label="Tiêu đề"
+            rules={[{ required: true, message: 'Vui lòng nhập tiêu đề' }]}
+          >
+            <Input placeholder="Giảm 10% toàn bộ đơn hàng" className="rounded-lg" />
+          </Form.Item>
+          <Form.Item
+            name="discountValue"
+            label="Giá trị giảm"
+            rules={[{ required: true, message: 'Nhập giá trị' }]}
+          >
+            <InputNumber className="w-full rounded-lg" min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="isActive" label="Kích hoạt" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <div className="text-xs text-slate-400">
+            Backend chỉ hỗ trợ sửa Tiêu đề, Giá trị giảm và trạng thái Kích hoạt.
+          </div>
         </Form>
       </Modal>
 

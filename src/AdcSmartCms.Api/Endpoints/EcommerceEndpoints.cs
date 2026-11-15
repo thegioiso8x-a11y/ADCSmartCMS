@@ -118,6 +118,15 @@ public static class EcommerceEndpoints
             return Results.Ok(await repo.ValidatePromotionAsync(request, ct));
         });
 
+        // GET /api/ecommerce/promotions?siteId=...: danh sách mã giảm giá của site (mới nhất trước).
+        app.MapGet("/api/ecommerce/promotions", async (Guid? siteId, IEcommerceRepository repo, CancellationToken ct) =>
+        {
+            if (siteId is null || siteId == Guid.Empty)
+                return Results.BadRequest(new { error = "siteId là bắt buộc." });
+
+            return Results.Ok(await repo.GetPromotionsAsync(siteId.Value, ct));
+        }).RequireAuthorization();
+
         // PUT /api/ecommerce/promotions/{promoId}: cập nhật title, discount_value, is_active.
         app.MapPut("/api/ecommerce/promotions/{promoId:guid}", async (Guid promoId, UpdatePromotionRequest request, IEcommerceRepository repo, CancellationToken ct) =>
         {
@@ -163,6 +172,24 @@ public static class EcommerceEndpoints
                 return Results.Json(new { error = ex.Message }, statusCode: ex.StatusCode);
             }
         });
+
+        // GET /api/ecommerce/orders?siteId=...&orderStatus=...: danh sách đơn hàng (mới nhất trước).
+        app.MapGet("/api/ecommerce/orders", async (Guid? siteId, string? orderStatus, IEcommerceRepository repo, CancellationToken ct) =>
+        {
+            if (siteId is null || siteId == Guid.Empty)
+                return Results.BadRequest(new { error = "siteId là bắt buộc." });
+
+            return Results.Ok(await repo.GetOrdersAsync(siteId.Value, orderStatus, ct));
+        }).RequireAuthorization();
+
+        // GET /api/ecommerce/orders/{orderId}: chi tiết đơn hàng kèm order_items.
+        app.MapGet("/api/ecommerce/orders/{orderId:guid}", async (Guid orderId, IEcommerceRepository repo, CancellationToken ct) =>
+        {
+            var detail = await repo.GetOrderByIdAsync(orderId, ct);
+            return detail is null
+                ? Results.NotFound(new { error = $"Không tìm thấy đơn hàng '{orderId}'." })
+                : Results.Ok(detail);
+        }).RequireAuthorization();
 
         // PUT /api/ecommerce/orders/{orderId}/status: cập nhật order_status / payment_status.
         app.MapPut("/api/ecommerce/orders/{orderId:guid}/status", async (Guid orderId, UpdateOrderStatusRequest request, IEcommerceRepository repo, CancellationToken ct) =>

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import {
-  Form, Input, Select, InputNumber, Button, Space, Alert, Divider, Typography, Tag, message, Card,
+  Form, Input, Select, Button, Space, Alert, Divider, Typography, Tag, Card, App,
 } from 'antd';
 import { RobotOutlined, ThunderboltOutlined, TranslationOutlined } from '@ant-design/icons';
 import api from '@/lib/api';
@@ -17,8 +17,6 @@ interface AiSettingsFormValues {
   provider: string;
   apiKey: string;
   model: string;
-  temperature: number;
-  maxTokens: number;
 }
 
 /** POST /api/ai/generate-seo -> AiSeoResult */
@@ -38,22 +36,31 @@ interface AiTranslateResult {
   isMock: boolean;
 }
 
+interface SeoTestFormValues {
+  title: string;
+  content: string;
+}
+
+interface TranslateTestFormValues {
+  text: string;
+  targetLang: string;
+}
+
 // ============================================================================
 // Hằng số
 // ============================================================================
 
 const PROVIDER_OPTIONS = [
-  { label: 'OpenAI (GPT)', value: 'openai' },
   { label: 'Google Gemini', value: 'gemini' },
+  { label: 'OpenAI (GPT)', value: 'openai' },
   { label: 'Anthropic Claude', value: 'claude' },
-  { label: 'Mock (nội bộ - test)', value: 'mock' },
 ];
 
-const MODEL_OPTIONS = [
-  { label: 'gpt-4o-mini', value: 'gpt-4o-mini' },
-  { label: 'gpt-4o', value: 'gpt-4o' },
-  { label: 'gemini-1.5-flash', value: 'gemini-1.5-flash' },
-  { label: 'claude-3-5-sonnet', value: 'claude-3-5-sonnet' },
+const TARGET_LANG_OPTIONS = [
+  { label: 'Tiếng Anh (en)', value: 'en' },
+  { label: 'Tiếng Nhật (ja)', value: 'ja' },
+  { label: 'Tiếng Hàn (ko)', value: 'ko' },
+  { label: 'Tiếng Việt (vi)', value: 'vi' },
 ];
 
 // ============================================================================
@@ -61,49 +68,67 @@ const MODEL_OPTIONS = [
 // ============================================================================
 
 export default function AiSettingsTab() {
-  const [form] = Form.useForm<AiSettingsFormValues>();
+  const { message } = App.useApp();
 
-  const [testing, setTesting] = useState(false);
+  const [settingsForm] = Form.useForm<AiSettingsFormValues>();
+  const [seoForm] = Form.useForm<SeoTestFormValues>();
+  const [translateForm] = Form.useForm<TranslateTestFormValues>();
+
+  const [seoLoading, setSeoLoading] = useState(false);
+  const [translateLoading, setTranslateLoading] = useState(false);
   const [seoResult, setSeoResult] = useState<AiSeoResult | null>(null);
   const [translateResult, setTranslateResult] = useState<AiTranslateResult | null>(null);
 
-  /** Gọi API mock POST /api/ai/generate-seo để kiểm tra kết nối. */
+  /** Gọi POST /api/ai/generate-seo với title + content người dùng nhập. */
   const handleTestSeo = async () => {
-    setTesting(true);
+    let values: SeoTestFormValues;
+    try {
+      values = await seoForm.validateFields();
+    } catch {
+      return;
+    }
+
+    setSeoLoading(true);
     setSeoResult(null);
     try {
       const res = await api.post<AiSeoResult>('/api/ai/generate-seo', {
-        title: 'ADC Smart CMS - Hệ thống quản trị nội dung tự động',
-        content:
-          'ADC Smart CMS giúp tự động hóa việc chuyển đổi giao diện HTML/CSS tĩnh thành website hoàn chỉnh, hỗ trợ đa ngôn ngữ và tối ưu SEO.',
+        title: values.title.trim(),
+        content: values.content.trim(),
       });
       setSeoResult(res.data);
-      message.success('Test AI (SEO) thành công');
+      message.success('Sinh SEO thành công');
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
-      message.error(e?.response?.data?.error || 'Test AI thất bại');
+      message.error(e?.response?.data?.error || 'Gọi API sinh SEO thất bại');
     } finally {
-      setTesting(false);
+      setSeoLoading(false);
     }
   };
 
-  /** Gọi API mock POST /api/ai/translate để kiểm tra kết nối. */
+  /** Gọi POST /api/ai/translate với text + targetLang người dùng nhập. */
   const handleTestTranslate = async () => {
-    setTesting(true);
+    let values: TranslateTestFormValues;
+    try {
+      values = await translateForm.validateFields();
+    } catch {
+      return;
+    }
+
+    setTranslateLoading(true);
     setTranslateResult(null);
     try {
       const res = await api.post<AiTranslateResult>('/api/ai/translate', {
-        text: 'Xin chào, đây là bản dịch thử nghiệm của ADC Smart CMS.',
+        text: values.text.trim(),
         sourceLang: 'vi',
-        targetLang: 'en',
+        targetLang: values.targetLang,
       });
       setTranslateResult(res.data);
-      message.success('Test AI (Translate) thành công');
+      message.success('Dịch thuật thành công');
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
-      message.error(e?.response?.data?.error || 'Test AI thất bại');
+      message.error(e?.response?.data?.error || 'Gọi API dịch thuật thất bại');
     } finally {
-      setTesting(false);
+      setTranslateLoading(false);
     }
   };
 
@@ -113,10 +138,11 @@ export default function AiSettingsTab() {
         type="warning"
         showIcon
         message="Cấu hình AI hiện ở chế độ READ-ONLY"
-        description="Backend chưa có endpoint lưu cms_ai_settings. Form dưới đây chỉ hiển thị giá trị mặc định; nút 'Test AI' gọi 2 API mock (/api/ai/generate-seo và /api/ai/translate)."
+        description="Backend chưa có endpoint lưu cms_ai_settings. Form cấu hình chỉ hiển thị giá trị mặc định; 2 Card bên dưới gọi API mock (/api/ai/generate-seo và /api/ai/translate)."
         className="rounded-xl"
       />
 
+      {/* ---------- Form cấu hình AI (read-only) ---------- */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
         <div className="flex items-center gap-2 mb-4">
           <RobotOutlined className="text-indigo-600 text-xl" />
@@ -124,104 +150,171 @@ export default function AiSettingsTab() {
         </div>
 
         <Form
-          form={form}
+          form={settingsForm}
           layout="vertical"
           requiredMark="optional"
           disabled
           initialValues={{
-            provider: 'mock',
+            provider: 'gemini',
             apiKey: 'sk-************************',
-            model: 'gpt-4o-mini',
-            temperature: 0.7,
-            maxTokens: 2048,
+            model: 'gemini-1.5-flash',
           }}
         >
           <div className="grid grid-cols-2 gap-x-4">
             <Form.Item name="provider" label="Nhà cung cấp (Provider)">
               <Select options={PROVIDER_OPTIONS} className="w-full" />
             </Form.Item>
-            <Form.Item name="model" label="Model">
-              <Select options={MODEL_OPTIONS} className="w-full" />
+            <Form.Item name="model" label="Text Model">
+              <Input placeholder="gemini-1.5-flash" className="rounded-lg font-mono" />
             </Form.Item>
           </div>
 
-          <Form.Item name="apiKey" label="API Key" extra="Khóa được mã hóa khi lưu vào cms_ai_settings (chưa hỗ trợ).">
+          <Form.Item
+            name="apiKey"
+            label="API Key"
+            extra="Khóa được mã hóa khi lưu vào cms_ai_settings (chưa hỗ trợ)."
+          >
             <Input.Password className="rounded-lg font-mono" />
           </Form.Item>
+        </Form>
+      </div>
 
-          <div className="grid grid-cols-2 gap-x-4">
-            <Form.Item name="temperature" label="Temperature">
-              <InputNumber min={0} max={2} step={0.1} className="w-full rounded-lg" style={{ width: '100%' }} />
+      {/* ---------- Khu vực Test AI: 2 Card ---------- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Card 1: Test Sinh SEO */}
+        <Card
+          className="rounded-2xl shadow-sm border-slate-200"
+          title={
+            <span className="font-bold flex items-center gap-2">
+              <ThunderboltOutlined className="text-indigo-600" />
+              Test Sinh SEO
+            </span>
+          }
+        >
+          <Form form={seoForm} layout="vertical" requiredMark="optional">
+            <Form.Item
+              name="title"
+              label="Tiêu đề (title)"
+              rules={[{ required: true, message: 'Vui lòng nhập tiêu đề' }]}
+            >
+              <Input placeholder="ADC Smart CMS - Quản trị nội dung tự động" className="rounded-lg" />
             </Form.Item>
-            <Form.Item name="maxTokens" label="Max Tokens">
-              <InputNumber min={1} max={128000} step={256} className="w-full rounded-lg" style={{ width: '100%' }} />
+            <Form.Item
+              name="content"
+              label="Nội dung (content)"
+              rules={[{ required: true, message: 'Vui lòng nhập nội dung' }]}
+            >
+              <Input.TextArea
+                rows={4}
+                placeholder="Mô tả nội dung bài viết để AI sinh meta SEO..."
+                className="rounded-lg"
+              />
             </Form.Item>
-          </div>
         </Form>
 
-        <Divider className="!my-4" />
-
-        <Space wrap size="middle">
           <Button
             type="primary"
             icon={<ThunderboltOutlined />}
-            loading={testing}
+            loading={seoLoading}
             onClick={handleTestSeo}
             className="rounded-lg font-semibold shadow-sm shadow-indigo-200"
           >
-            Test AI - Sinh SEO
+            Generate
           </Button>
+
+          {seoResult ? (
+            <>
+              <Divider className="!my-4" />
+              <Space size={4} className="mb-2">
+                <Tag color="blue" className="rounded-md">provider: {seoResult.provider}</Tag>
+                {seoResult.isMock ? <Tag color="orange" className="rounded-md">MOCK</Tag> : null}
+              </Space>
+              <div className="space-y-2 text-sm mb-3">
+                <div>
+                  <Text type="secondary">Meta Title: </Text>
+                  <Text strong>{seoResult.metaTitle}</Text>
+                </div>
+                <div>
+                  <Text type="secondary">Meta Description: </Text>
+                  <Text>{seoResult.metaDescription}</Text>
+                </div>
+                <div>
+                  <Text type="secondary">Suggested Slug: </Text>
+                  <Text code>{seoResult.suggestedSlug}</Text>
+                </div>
+                <div>
+                  <Text type="secondary">Tags: </Text>
+                  <Space size={4} wrap>
+                    {(seoResult.tags ?? []).map((t) => (
+                      <Tag key={t} className="rounded-md">{t}</Tag>
+                    ))}
+                  </Space>
+                </div>
+              </div>
+              <div className="text-xs text-slate-500 mb-1">JSON kết quả:</div>
+              <pre className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs overflow-auto max-h-56">
+                {JSON.stringify(seoResult, null, 2)}
+              </pre>
+            </>
+          ) : null}
+        </Card>
+
+        {/* Card 2: Test Dịch thuật */}
+        <Card
+          className="rounded-2xl shadow-sm border-slate-200"
+          title={
+            <span className="font-bold flex items-center gap-2">
+              <TranslationOutlined className="text-indigo-600" />
+              Test Dịch thuật
+            </span>
+          }
+        >
+          <Form form={translateForm} layout="vertical" requiredMark="optional">
+            <Form.Item
+              name="text"
+              label="Văn bản cần dịch (text)"
+              rules={[{ required: true, message: 'Vui lòng nhập văn bản' }]}
+            >
+              <Input.TextArea
+                rows={4}
+                placeholder="Xin chào, đây là bản dịch thử nghiệm của ADC Smart CMS."
+                className="rounded-lg"
+              />
+            </Form.Item>
+            <Form.Item
+              name="targetLang"
+              label="Ngôn ngữ đích (targetLang)"
+              rules={[{ required: true, message: 'Vui lòng chọn ngôn ngữ đích' }]}
+            >
+              <Select options={TARGET_LANG_OPTIONS} className="w-full" placeholder="Chọn ngôn ngữ" />
+            </Form.Item>
+          </Form>
+
           <Button
             icon={<TranslationOutlined />}
-            loading={testing}
+            loading={translateLoading}
             onClick={handleTestTranslate}
             className="rounded-lg"
           >
-            Test AI - Dịch thuật
+            Translate
           </Button>
-        </Space>
-      </div>
 
-      {seoResult ? (
-        <Card className="rounded-2xl shadow-sm border-slate-200" title={<span className="font-bold">Kết quả sinh SEO</span>}>
-          <Space size={4} className="mb-3">
-            <Tag color="blue" className="rounded-md">provider: {seoResult.provider}</Tag>
-            {seoResult.isMock ? <Tag color="orange" className="rounded-md">MOCK</Tag> : null}
-          </Space>
-          <div className="space-y-2 text-sm">
-            <div>
-              <Text type="secondary">Meta Title: </Text>
-              <Text strong>{seoResult.metaTitle}</Text>
-            </div>
-            <div>
-              <Text type="secondary">Meta Description: </Text>
-              <Text>{seoResult.metaDescription}</Text>
-            </div>
-            <div>
-              <Text type="secondary">Suggested Slug: </Text>
-              <Text code>{seoResult.suggestedSlug}</Text>
-            </div>
-            <div>
-              <Text type="secondary">Tags: </Text>
-              <Space size={4} wrap>
-                {(seoResult.tags ?? []).map((t) => (
-                  <Tag key={t} className="rounded-md">{t}</Tag>
-                ))}
+          {translateResult ? (
+            <>
+              <Divider className="!my-4" />
+              <Space size={4} className="mb-2">
+                <Tag color="blue" className="rounded-md">provider: {translateResult.provider}</Tag>
+                {translateResult.isMock ? <Tag color="orange" className="rounded-md">MOCK</Tag> : null}
               </Space>
-            </div>
-          </div>
+              <Paragraph className="!mb-3 text-sm">{translateResult.translatedText}</Paragraph>
+              <div className="text-xs text-slate-500 mb-1">JSON kết quả:</div>
+              <pre className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs overflow-auto max-h-56">
+                {JSON.stringify(translateResult, null, 2)}
+              </pre>
+            </>
+          ) : null}
         </Card>
-      ) : null}
-
-      {translateResult ? (
-        <Card className="rounded-2xl shadow-sm border-slate-200" title={<span className="font-bold">Kết quả dịch thuật</span>}>
-          <Space size={4} className="mb-3">
-            <Tag color="blue" className="rounded-md">provider: {translateResult.provider}</Tag>
-            {translateResult.isMock ? <Tag color="orange" className="rounded-md">MOCK</Tag> : null}
-          </Space>
-          <Paragraph className="!mb-0 text-sm">{translateResult.translatedText}</Paragraph>
-        </Card>
-      ) : null}
+      </div>
     </div>
   );
 }

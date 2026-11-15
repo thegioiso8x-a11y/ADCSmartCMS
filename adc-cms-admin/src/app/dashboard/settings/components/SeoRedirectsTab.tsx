@@ -2,8 +2,8 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Table, Tag, Button, Modal, Form, Input, Select, Switch, Space, message, Empty,
-  Popconfirm, Alert,
+  Table, Tag, Button, Modal, Form, Input, Select, Switch, Space, Empty,
+  Popconfirm, Alert, App,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, ReloadOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
@@ -58,6 +58,7 @@ const STATUS_CODE_COLOR: Record<number, string> = {
 
 export default function SeoRedirectsTab() {
   const siteId = useAuthStore((state) => state.siteId);
+  const { message } = App.useApp();
 
   const [redirects, setRedirects] = useState<SeoRedirect[]>([]);
   const [loading, setLoading] = useState(false);
@@ -81,7 +82,7 @@ export default function SeoRedirectsTab() {
     } finally {
       setLoading(false);
     }
-  }, [siteId]);
+  }, [siteId, message]);
 
   useEffect(() => {
     loadRedirects();
@@ -172,12 +173,7 @@ export default function SeoRedirectsTab() {
       title: 'Đường dẫn cũ',
       dataIndex: 'oldPath',
       key: 'oldPath',
-      render: (v: string, record) => (
-        <Space size={4}>
-          <span className="font-mono text-sm text-slate-800">{v}</span>
-          {record.isRegex ? <Tag color="orange" className="rounded-md">Regex</Tag> : null}
-        </Space>
-      ),
+      render: (v: string) => <span className="font-mono text-sm text-slate-800">{v}</span>,
     },
     {
       title: 'Đường dẫn mới',
@@ -194,6 +190,18 @@ export default function SeoRedirectsTab() {
       render: (v: number) => (
         <Tag color={STATUS_CODE_COLOR[v] ?? 'default'} className="rounded-md font-semibold">
           {v}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Is Regex',
+      dataIndex: 'isRegex',
+      key: 'isRegex',
+      width: 110,
+      align: 'center',
+      render: (v: boolean) => (
+        <Tag color={v ? 'orange' : 'default'} className="rounded-md">
+          {v ? 'Regex' : 'Exact'}
         </Tag>
       ),
     },

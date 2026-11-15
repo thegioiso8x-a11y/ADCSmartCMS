@@ -178,6 +178,67 @@ public sealed class EcommerceException : Exception
     public int StatusCode { get; }
 }
 
+// ---------- Danh sách (GET) ----------
+
+/// <summary>Một dòng trong GET /api/ecommerce/promotions.</summary>
+public sealed class PromotionListItemDto
+{
+    public Guid Id { get; set; }
+    public Guid SiteId { get; set; }
+    public string CouponCode { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string DiscountType { get; set; } = string.Empty;
+    public decimal DiscountValue { get; set; }
+    public decimal? MaxDiscountAmount { get; set; }
+    public decimal MinOrderAmount { get; set; }
+    public int? UsageLimit { get; set; }
+    public int UsedCount { get; set; }
+    public DateTimeOffset StartAt { get; set; }
+    public DateTimeOffset? EndAt { get; set; }
+    public bool IsActive { get; set; }
+}
+
+/// <summary>Một dòng trong GET /api/ecommerce/orders.</summary>
+public sealed class OrderListItemDto
+{
+    public Guid Id { get; set; }
+    public Guid SiteId { get; set; }
+    public string OrderCode { get; set; } = string.Empty;
+    public Guid? CustomerId { get; set; }
+    public string OrderStatus { get; set; } = string.Empty;
+    public string PaymentStatus { get; set; } = string.Empty;
+    public string PaymentMethod { get; set; } = string.Empty;
+    public string ShippingInfo { get; set; } = "{}";   // JSON string (raw)
+    public decimal SubtotalAmount { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public decimal ShippingFee { get; set; }
+    public decimal TaxAmount { get; set; }
+    public decimal TotalAmount { get; set; }
+    public string? CouponCode { get; set; }
+    public string? CustomerNote { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>Một dòng chi tiết trong GET /api/ecommerce/orders/{orderId}.</summary>
+public sealed class OrderItemDetailDto
+{
+    public long Id { get; set; }
+    public Guid OrderId { get; set; }
+    public Guid EntryId { get; set; }
+    public Guid VariantId { get; set; }
+    public string ProductTitle { get; set; } = string.Empty;
+    public string SkuCode { get; set; } = string.Empty;
+    public string? VariantLabel { get; set; }
+    public string? ThumbnailUrl { get; set; }
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal TotalPrice { get; set; }
+}
+
+/// <summary>Kết quả GET /api/ecommerce/orders/{orderId}: đơn hàng + danh sách dòng hàng.</summary>
+public sealed record OrderDetailResult(OrderListItemDto Order, IReadOnlyList<OrderItemDetailDto> Items);
+
 public interface IEcommerceRepository
 {
     /// <summary>Tạo biến thể; trả null nếu entry không tồn tại hoặc SKU đã tồn tại trong site.</summary>
@@ -219,4 +280,13 @@ public interface IEcommerceRepository
 
     /// <summary>Xóa đơn hàng (cascade xóa order_items). Trả false nếu không tồn tại.</summary>
     Task<bool> DeleteOrderAsync(Guid orderId, CancellationToken ct);
+
+    /// <summary>Danh sách mã giảm giá của site (mới nhất trước).</summary>
+    Task<IReadOnlyList<PromotionListItemDto>> GetPromotionsAsync(Guid siteId, CancellationToken ct);
+
+    /// <summary>Danh sách đơn hàng của site (mới nhất trước), lọc theo order_status nếu có.</summary>
+    Task<IReadOnlyList<OrderListItemDto>> GetOrdersAsync(Guid siteId, string? orderStatus, CancellationToken ct);
+
+    /// <summary>Chi tiết 1 đơn hàng kèm order_items. Trả null nếu không tồn tại.</summary>
+    Task<OrderDetailResult?> GetOrderByIdAsync(Guid orderId, CancellationToken ct);
 }

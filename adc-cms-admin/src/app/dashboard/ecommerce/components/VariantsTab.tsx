@@ -5,7 +5,9 @@ import {
   Table, Tag, Button, Modal, Form, Input, InputNumber, Select, Switch, Space, message, Empty, Popconfirm,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined, AppstoreAddOutlined, ThunderboltOutlined,
+} from '@ant-design/icons';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import type { ContentType, FilteredEntry, FilterEntriesResponse } from '@/lib/types';
@@ -49,6 +51,23 @@ interface VariantFormValues {
   isActive: boolean;
 }
 
+/** Một dòng tổ hợp trong ma trận biến thể. */
+interface MatrixRow {
+  key: string;
+  /** Tổ hợp thuộc tính, VD: { color: 'Đỏ', size: 'M' } */
+  options: Record<string, string>;
+  skuCode: string;
+  price: number;
+  stockQuantity: number;
+}
+
+interface MatrixFormValues {
+  attr1Name: string;
+  attr1Values: string[];
+  attr2Name: string;
+  attr2Values: string[];
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -69,6 +88,44 @@ function parseJsonObject(raw?: string | null): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/** Sinh mã SKU gợi ý từ tổ hợp thuộc tính (bỏ dấu, viết hoa, nối bằng '-'). */
+function buildSkuSuggestion(options: Record<string, string>): string {
+  const parts = Object.values(options)
+    .map((v) =>
+      v
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/gi, 'D')
+        .replace(/[^A-Za-z0-9]/g, '')
+        .toUpperCase()
+    )
+    .filter((v) => v.length > 0);
+  return parts.join('-');
+}
+
+/** Sinh tất cả tổ hợp (tích Descartes) của 2 danh sách giá trị. */
+function buildCombinations(
+  attr1Name: string,
+  attr1Values: string[],
+  attr2Name: string,
+  attr2Values: string[]
+): MatrixRow[] {
+  const rows: MatrixRow[] = [];
+  for (const v1 of attr1Values) {
+    for (const v2 of attr2Values) {
+      const options: Record<string, string> = { [attr1Name]: v1, [attr2Name]: v2 };
+      rows.push({
+        key: `${attr1Name}:${v1}|${attr2Name}:${v2}`,
+        options,
+        skuCode: buildSkuSuggestion(options),
+        price: 0,
+        stockQuantity: 0,
+      });
+    }
+  }
+  return rows;
 }
 
 // ============================================================================
@@ -94,6 +151,12 @@ export default function VariantsTab() {
   const [editingVariant, setEditingVariant] = useState<Variant | null>(null);
   const [variantSubmitting, setVariantSubmitting] = useState(false);
   const [variantForm] = Form.useForm<VariantFormValues>();
+
+  // ----- Modal Tạo ma trận biến thể -----
+  const [matrixModalOpen, setMatrixModalOpen] = useState(false);
+  const [matrixSubmitting, setMatrixSubmitting] = useState(false);
+  const [matrixForm] = Form.useForm<MatrixFormValues>();
+  const [matrixRows, setMatrixRows] = useState<MatrixRow[]>([]);
 
   /** Tải danh sách Content Type (để chọn loại sản phẩm). */
   useEffect(() => {
@@ -253,6 +316,115 @@ export default function VariantsTab() {
     }
   };
 
+  /** Mở Modal tạo ma trận biến thể. */
+  const openMatrixModal = () => {
+    if (!selectedEntryId) {
+      message.warning('Vui lòng chọn sản phẩm (Entry) trước.');
+      return;
+    }
+    matrixForm.resetFields();
+    matrixForm.setFieldsValue({
+      attr1Name: 'color',
+      attr1Values: [],
+      attr2Name: 'size',
+      attr2Values: [],
+    });
+    setMatrixRows([]);
+    setMatrixModalOpen(true);
+  };
+
+  /** Sinh ma trận tổ hợp từ 2 danh sách thuộc tính. */
+  const handleGenerateMatrix = async () => {
+    let values: MatrixFormValues;
+    try {
+      values = await matrixForm.validateFields();
+    } catch {
+      return;
+    }
+
+    const attr1Values = (values.attr1Values ?? []).map((v) => v.trim()).filter((v) => v.length > 0);
+    const attr2Values = (values.attr2Values ?? []).map((v) => v.trim()).filter((v) => v.length > 0);
+
+    if (attr1Values.length === 0 || attr2Values.length === 0) {
+      message.warning('Mỗi thuộc tính cần ít nhất 1 giá trị.');
+      return;
+    }
+
+    const rows = buildCombinations(
+      values.attr1Name.trim(),
+      attr1Values,
+      values.attr2Name.trim(),
+      attr2Values
+    );
+    setMatrixRows(rows);
+    message.success(`Đã sinh ${rows.length} tổ hợp biến thể.`);
+  };
+
+  /** Cập nhật 1 trường của 1 dòng trong ma trận. */
+  const updateMatrixRow = (key: string, patch: Partial<MatrixRow>) => {
+    setMatrixRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  };
+
+  /** Lưu tất cả dòng ma trận (POST /api/ecommerce/variants cho từng dòng). */
+  const handleSaveMatrix = async () => {
+    if (!siteId || !selectedEntryId) return;
+    if (matrixRows.length === 0) {
+      message.warning('Chưa có tổ hợp nào. Vui lòng bấm "Generate" trước.');
+      return;
+    }
+
+    const invalid = matrixRows.find((r) => !r.skuCode.trim());
+    if (invalid) {
+      message.error('Mọi dòng đều phải có mã SKU.');
+      return;
+    }
+
+    const duplicated = matrixRows
+      .map((r) => r.skuCode.trim())
+      .filter((sku, idx, arr) => arr.indexOf(sku) !== idx);
+    if (duplicated.length > 0) {
+      message.error(`Mã SKU bị trùng trong ma trận: ${Array.from(new Set(duplicated)).join(', ')}`);
+      return;
+    }
+
+    setMatrixSubmitting(true);
+    try {
+      await Promise.all(
+        matrixRows.map((row) =>
+          api.post('/api/ecommerce/variants', {
+            siteId,
+            entryId: selectedEntryId,
+            skuCode: row.skuCode.trim(),
+            price: row.price,
+            salePrice: 0,
+            costPrice: null,
+            stockQuantity: row.stockQuantity,
+            trackInventory: true,
+            variantOptions: row.options,
+            barcode: null,
+            imageUrl: null,
+            weightGram: 0,
+            isDefault: false,
+            isActive: true,
+          })
+        )
+      );
+      message.success(`Đã tạo ${matrixRows.length} biến thể thành công`);
+      setMatrixModalOpen(false);
+      setMatrixRows([]);
+      await loadVariants(selectedEntryId);
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { error?: string } } };
+      if (e?.response?.status === 409) {
+        message.error(e?.response?.data?.error || 'Một số SKU đã tồn tại. Vui lòng kiểm tra lại mã SKU.');
+      } else {
+        message.error(e?.response?.data?.error || 'Tạo ma trận biến thể thất bại');
+      }
+    } finally {
+      setMatrixSubmitting(false);
+    }
+  };
+
   /** Xóa biến thể. */
   const handleDeleteVariant = async (record: Variant) => {
     try {
@@ -369,6 +541,64 @@ export default function VariantsTab() {
     },
   ];
 
+  const matrixColumns: ColumnsType<MatrixRow> = [
+    {
+      title: 'Tổ hợp thuộc tính',
+      key: 'options',
+      render: (_, record) => (
+        <Space size={4} wrap>
+          {Object.entries(record.options).map(([k, v]) => (
+            <Tag key={k} className="rounded-md">
+              {k}: {v}
+            </Tag>
+          ))}
+        </Space>
+      ),
+    },
+    {
+      title: 'Mã SKU',
+      key: 'skuCode',
+      width: 220,
+      render: (_, record) => (
+        <Input
+          value={record.skuCode}
+          onChange={(e) => updateMatrixRow(record.key, { skuCode: e.target.value })}
+          className="rounded-lg font-mono"
+          placeholder="SKU"
+        />
+      ),
+    },
+    {
+      title: 'Giá bán (VNĐ)',
+      key: 'price',
+      width: 160,
+      render: (_, record) => (
+        <InputNumber
+          value={record.price}
+          onChange={(v) => updateMatrixRow(record.key, { price: typeof v === 'number' ? v : 0 })}
+          min={0}
+          step={1000}
+          style={{ width: '100%' }}
+          className="rounded-lg"
+        />
+      ),
+    },
+    {
+      title: 'Tồn kho',
+      key: 'stockQuantity',
+      width: 130,
+      render: (_, record) => (
+        <InputNumber
+          value={record.stockQuantity}
+          onChange={(v) => updateMatrixRow(record.key, { stockQuantity: typeof v === 'number' ? v : 0 })}
+          min={0}
+          style={{ width: '100%' }}
+          className="rounded-lg"
+        />
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       {/* Bộ chọn sản phẩm */}
@@ -426,6 +656,14 @@ export default function VariantsTab() {
             className="rounded-lg font-semibold shadow-sm shadow-indigo-200"
           >
             Thêm biến thể
+          </Button>
+          <Button
+            icon={<AppstoreAddOutlined />}
+            onClick={openMatrixModal}
+            disabled={!selectedEntryId}
+            className="rounded-lg"
+          >
+            Tạo ma trận biến thể
           </Button>
         </Space>
       </div>
@@ -523,6 +761,98 @@ export default function VariantsTab() {
             </Form.Item>
           </div>
         </Form>
+      </Modal>
+
+      {/* Modal Tạo ma trận biến thể */}
+      <Modal
+        title={<span className="font-semibold">Tạo ma trận biến thể</span>}
+        open={matrixModalOpen}
+        onCancel={() => {
+          setMatrixModalOpen(false);
+          setMatrixRows([]);
+        }}
+        onOk={handleSaveMatrix}
+        confirmLoading={matrixSubmitting}
+        okText="Lưu tất cả"
+        cancelText="Hủy"
+        okButtonProps={{ disabled: matrixRows.length === 0 }}
+        width={900}
+        destroyOnHidden
+      >
+        <Form form={matrixForm} layout="vertical" requiredMark="optional" className="mt-4">
+          <div className="grid grid-cols-2 gap-x-4">
+            <Form.Item
+              name="attr1Name"
+              label="Tên thuộc tính 1"
+              rules={[{ required: true, message: 'Nhập tên thuộc tính' }]}
+            >
+              <Input placeholder="color" className="rounded-lg font-mono" />
+            </Form.Item>
+            <Form.Item
+              name="attr1Values"
+              label="Giá trị thuộc tính 1"
+              rules={[{ required: true, message: 'Nhập ít nhất 1 giá trị' }]}
+              extra="Nhập rồi nhấn Enter để thêm. VD: Đỏ, Xanh"
+            >
+              <Select
+                mode="tags"
+                placeholder="Đỏ, Xanh..."
+                className="w-full"
+                tokenSeparators={[',']}
+                open={false}
+                suffixIcon={null}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="attr2Name"
+              label="Tên thuộc tính 2"
+              rules={[{ required: true, message: 'Nhập tên thuộc tính' }]}
+            >
+              <Input placeholder="size" className="rounded-lg font-mono" />
+            </Form.Item>
+            <Form.Item
+              name="attr2Values"
+              label="Giá trị thuộc tính 2"
+              rules={[{ required: true, message: 'Nhập ít nhất 1 giá trị' }]}
+              extra="Nhập rồi nhấn Enter để thêm. VD: M, L"
+            >
+              <Select
+                mode="tags"
+                placeholder="M, L..."
+                className="w-full"
+                tokenSeparators={[',']}
+                open={false}
+                suffixIcon={null}
+              />
+            </Form.Item>
+          </div>
+
+          <Button
+            type="primary"
+            icon={<ThunderboltOutlined />}
+            onClick={handleGenerateMatrix}
+            className="rounded-lg font-semibold shadow-sm shadow-indigo-200"
+          >
+            Generate
+          </Button>
+        </Form>
+
+        {matrixRows.length > 0 ? (
+          <div className="mt-4">
+            <div className="text-sm text-slate-600 mb-2">
+              Đã sinh <span className="font-semibold text-indigo-600">{matrixRows.length}</span> tổ hợp. Nhập giá và tồn kho cho từng dòng:
+            </div>
+            <Table<MatrixRow>
+              rowKey="key"
+              size="small"
+              columns={matrixColumns}
+              dataSource={matrixRows}
+              pagination={false}
+              scroll={{ y: 320 }}
+            />
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

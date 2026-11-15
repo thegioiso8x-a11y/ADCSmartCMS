@@ -154,6 +154,53 @@ public sealed class EcommerceRepository : IEcommerceRepository
 
     private const string DeleteOrderSql = "DELETE FROM dbo.cms_ecommerce_orders WHERE id = @OrderId;";
 
+    // ---------- Danh sách (GET) ----------
+
+    private const string SelectPromotionsSql = """
+        SELECT id AS Id, site_id AS SiteId, coupon_code AS CouponCode, title AS Title,
+               discount_type AS DiscountType, discount_value AS DiscountValue,
+               max_discount_amount AS MaxDiscountAmount, min_order_amount AS MinOrderAmount,
+               usage_limit AS UsageLimit, used_count AS UsedCount,
+               start_at AS StartAt, end_at AS EndAt, is_active AS IsActive
+        FROM dbo.cms_ecommerce_promotions
+        WHERE site_id = @SiteId
+        ORDER BY start_at DESC;
+        """;
+
+    private const string SelectOrdersSql = """
+        SELECT id AS Id, site_id AS SiteId, order_code AS OrderCode, customer_id AS CustomerId,
+               order_status AS OrderStatus, payment_status AS PaymentStatus, payment_method AS PaymentMethod,
+               shipping_info AS ShippingInfo, subtotal_amount AS SubtotalAmount,
+               discount_amount AS DiscountAmount, shipping_fee AS ShippingFee, tax_amount AS TaxAmount,
+               total_amount AS TotalAmount, coupon_code AS CouponCode, customer_note AS CustomerNote,
+               created_at AS CreatedAt, updated_at AS UpdatedAt
+        FROM dbo.cms_ecommerce_orders
+        WHERE site_id = @SiteId
+          AND (@OrderStatus IS NULL OR order_status = @OrderStatus)
+        ORDER BY created_at DESC;
+        """;
+
+    private const string SelectOrderByIdSql = """
+        SELECT id AS Id, site_id AS SiteId, order_code AS OrderCode, customer_id AS CustomerId,
+               order_status AS OrderStatus, payment_status AS PaymentStatus, payment_method AS PaymentMethod,
+               shipping_info AS ShippingInfo, subtotal_amount AS SubtotalAmount,
+               discount_amount AS DiscountAmount, shipping_fee AS ShippingFee, tax_amount AS TaxAmount,
+               total_amount AS TotalAmount, coupon_code AS CouponCode, customer_note AS CustomerNote,
+               created_at AS CreatedAt, updated_at AS UpdatedAt
+        FROM dbo.cms_ecommerce_orders
+        WHERE id = @OrderId;
+        """;
+
+    private const string SelectOrderItemsSql = """
+        SELECT id AS Id, order_id AS OrderId, entry_id AS EntryId, variant_id AS VariantId,
+               product_title AS ProductTitle, sku_code AS SkuCode, variant_label AS VariantLabel,
+               thumbnail_url AS ThumbnailUrl, quantity AS Quantity, unit_price AS UnitPrice,
+               total_price AS TotalPrice
+        FROM dbo.cms_ecommerce_order_items
+        WHERE order_id = @OrderId
+        ORDER BY id;
+        """;
+
     private readonly IDbConnectionFactory _factory;
 
     public EcommerceRepository(IDbConnectionFactory factory) => _factory = factory;
@@ -457,6 +504,45 @@ public sealed class EcommerceRepository : IEcommerceRepository
         var affected = await conn.ExecuteAsync(new CommandDefinition(
             DeleteOrderSql, new { OrderId = orderId }, cancellationToken: ct));
         return affected > 0;
+    }
+
+    // ---------- Danh sách (GET) ----------
+
+    public async Task<IReadOnlyList<PromotionListItemDto>> GetPromotionsAsync(Guid siteId, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        var rows = await conn.QueryAsync<PromotionListItemDto>(new CommandDefinition(
+            SelectPromotionsSql, new { SiteId = siteId }, cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<OrderListItemDto>> GetOrdersAsync(Guid siteId, string? orderStatus, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        var rows = await conn.QueryAsync<OrderListItemDto>(new CommandDefinition(
+            SelectOrdersSql,
+            new { SiteId = siteId, OrderStatus = string.IsNullOrWhiteSpace(orderStatus) ? null : orderStatus.Trim() },
+            cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    public async Task<OrderDetailResult?> GetOrderByIdAsync(Guid orderId, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        var order = await conn.QuerySingleOrDefaultAsync<OrderListItemDto>(new CommandDefinition(
+            SelectOrderByIdSql, new { OrderId = orderId }, cancellationToken: ct));
+        if (order is null) return null;
+
+        var items = await conn.QueryAsync<OrderItemDetailDto>(new CommandDefinition(
+            SelectOrderItemsSql, new { OrderId = orderId }, cancellationToken: ct));
+
+        return new OrderDetailResult(order, items.ToList());
     }
 
     // ---------- Helpers ----------
