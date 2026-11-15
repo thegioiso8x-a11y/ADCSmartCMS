@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { AntdRegistry } from '@ant-design/nextjs-registry';
-import { ConfigProvider } from 'antd';
+import { App, ConfigProvider } from 'antd';
 import { Inter } from 'next/font/google';
 import "./globals.css";
 
@@ -42,10 +42,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               },
             }}
           >
-            {children}
+            <App>{children}</App>
           </ConfigProvider>
         </AntdRegistry>
       </body>
     </html>
   );
 }
+

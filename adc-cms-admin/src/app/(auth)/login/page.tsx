@@ -1,5 +1,5 @@
 'use client';
-import { Button, Card, Form, Input, message, Typography } from 'antd';
+import { App, Button, Card, Form, Input, Typography } from 'antd';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
@@ -15,6 +15,7 @@ interface LoginForm {
 
 export default function LoginPage() {
   const router = useRouter();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const setAuth = useAuthStore((state) => state.setAuth);
 
@@ -58,3 +59,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

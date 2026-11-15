@@ -71,6 +71,48 @@ public static class AuthEndpoints
             });
         }).RequireAuthorization();
 
+        // GET /api/users: danh sách user (không chứa password_hash), mới nhất trước.
+        app.MapGet("/api/users", async (IAuthService auth, CancellationToken ct) =>
+            Results.Ok(await auth.GetUsersAsync(ct))).RequireAuthorization();
+
+        // POST /api/users: tạo user mới từ trang quản trị.
+        app.MapPost("/api/users", async (CreateUserRequest request, IAuthService auth, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return Results.BadRequest(new { error = "email là bắt buộc." });
+            if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
+                return Results.BadRequest(new { error = "password phải có ít nhất 6 ký tự." });
+            if (string.IsNullOrWhiteSpace(request.FullName))
+                return Results.BadRequest(new { error = "fullName là bắt buộc." });
+
+            var created = await auth.CreateUserAsync(request, ct);
+            return created is null
+                ? Results.Conflict(new { error = $"Email '{request.Email}' đã tồn tại." })
+                : Results.Json(created, statusCode: StatusCodes.Status201Created);
+        }).RequireAuthorization();
+
+        // PUT /api/users/{id}: cập nhật user (null = giữ nguyên).
+        app.MapPut("/api/users/{id:guid}", async (Guid id, UpdateUserRequest request, IAuthService auth, CancellationToken ct) =>
+        {
+            if (request.Password is not null && request.Password.Length < 6)
+                return Results.BadRequest(new { error = "password phải có ít nhất 6 ký tự." });
+
+            var updated = await auth.UpdateUserAsync(id, request, ct);
+            return updated is null
+                ? Results.NotFound(new { error = $"Không tìm thấy user '{id}'." })
+                : Results.Ok(updated);
+        }).RequireAuthorization();
+
+        // DELETE /api/users/{id}: xóa user (cascade xóa user_roles).
+        app.MapDelete("/api/users/{id:guid}", async (Guid id, IAuthService auth, CancellationToken ct) =>
+        {
+            var deleted = await auth.DeleteUserAsync(id, ct);
+            return deleted
+                ? Results.Ok(new { userId = id, status = "deleted" })
+                : Results.NotFound(new { error = $"Không tìm thấy user '{id}'." });
+        }).RequireAuthorization();
+
         return app;
     }
 }
+

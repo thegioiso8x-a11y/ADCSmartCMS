@@ -29,6 +29,23 @@ interface CreateRoleFormValues {
 }
 
 // ============================================================================
+// Helpers (phòng vệ: API có thể trả mảng trực tiếp hoặc bọc trong object)
+// ============================================================================
+
+/** Chuẩn hóa response về mảng Role[] an toàn. */
+function toRoleArray(data: unknown): Role[] {
+  if (Array.isArray(data)) return data as Role[];
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    for (const key of ['items', 'roles', 'data', 'result']) {
+      const v = obj[key];
+      if (Array.isArray(v)) return v as Role[];
+    }
+  }
+  return [];
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -47,8 +64,8 @@ export default function RolesTab() {
     if (!siteId) return;
     setLoading(true);
     try {
-      const res = await api.get<Role[]>('/api/rbac/roles', { params: { siteId } });
-      setRoles(res.data ?? []);
+      const res = await api.get<unknown>('/api/rbac/roles', { params: { siteId } });
+      setRoles(toRoleArray(res.data));
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
       message.error(e?.response?.data?.error || 'Không tải được danh sách Role');
@@ -194,7 +211,7 @@ export default function RolesTab() {
         <Table<Role>
           rowKey="id"
           columns={columns}
-          dataSource={roles}
+          dataSource={Array.isArray(roles) ? roles : []}
           loading={loading}
           pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `Tổng ${t} role` }}
           locale={{ emptyText: <Empty description="Chưa có Role nào" /> }}
@@ -239,3 +256,4 @@ export default function RolesTab() {
     </div>
   );
 }
+

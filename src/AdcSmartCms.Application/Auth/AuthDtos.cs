@@ -33,6 +33,37 @@ public sealed record LoginResult(
 /// <summary>Kết quả đăng ký (không trả password_hash).</summary>
 public sealed record RegisterResult(Guid Id, string Email, string FullName, bool IsSuperAdmin);
 
+/// <summary>Một user trong danh sách quản trị (không chứa password_hash).</summary>
+public sealed class UserListItemDto
+{
+    public Guid Id { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string? AvatarUrl { get; set; }
+    public bool IsSuperAdmin { get; set; }
+    public bool IsActive { get; set; }
+    public DateTimeOffset? LastLoginAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Body của POST /api/users (tạo user mới từ trang quản trị).</summary>
+public sealed record CreateUserRequest(
+    string Email,
+    string Password,
+    string FullName,
+    bool IsSuperAdmin = false,
+    bool IsActive = true);
+
+/// <summary>
+/// Body của PUT /api/users/{id}.
+/// null = giữ nguyên giá trị cũ.
+/// </summary>
+public sealed record UpdateUserRequest(
+    string? FullName = null,
+    string? Password = null,
+    bool? IsSuperAdmin = null,
+    bool? IsActive = null);
+
 public interface IAuthService
 {
     /// <summary>Hash mật khẩu bằng BCrypt (kèm salt tự sinh).</summary>
@@ -49,4 +80,17 @@ public interface IAuthService
 
     /// <summary>Đăng ký user mới (hash password). Trả null nếu email đã tồn tại.</summary>
     Task<RegisterResult?> RegisterAsync(RegisterRequest request, CancellationToken ct);
+
+    /// <summary>Danh sách user (không chứa password_hash), mới nhất trước.</summary>
+    Task<IReadOnlyList<UserListItemDto>> GetUsersAsync(CancellationToken ct);
+
+    /// <summary>Tạo user mới (hash password). Trả null nếu email đã tồn tại.</summary>
+    Task<UserListItemDto?> CreateUserAsync(CreateUserRequest request, CancellationToken ct);
+
+    /// <summary>Cập nhật user (null = giữ nguyên). Trả null nếu không tìm thấy.</summary>
+    Task<UserListItemDto?> UpdateUserAsync(Guid userId, UpdateUserRequest request, CancellationToken ct);
+
+    /// <summary>Xóa user. Trả false nếu không tìm thấy.</summary>
+    Task<bool> DeleteUserAsync(Guid userId, CancellationToken ct);
 }
+
