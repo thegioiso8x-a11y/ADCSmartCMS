@@ -1,4 +1,4 @@
-# DỰ ÁN: ADC SMART & COMPOSABLE CMS - HANDOFF V6.0
+# DỰ ÁN: ADC SMART & COMPOSABLE CMS - HANDOFF V6.2
 
 ## PHẦN 1: QUY TẮC GIAO TIẾP TỐI ƯU TOKEN (RULES V2.0 - BẮT BUỘC TUÂN THỦ)
 1. **KHÔNG IN CODE DÀI TRONG CHAT:** Tự động dùng tool hoặc lệnh `bash` để tạo/sửa file. Chỉ in đoạn thay đổi (tối đa 10 dòng).
@@ -27,14 +27,15 @@
 - Đã fix các lỗi Dapper `DBNull` (dùng Anonymous Object thay vì `DbString`).
 - Đã fix lỗi Circular Reference trong Menu.
 
-### 2. Frontend (7 module DONE, 1 stub)
-- **UI/UX:** Enterprise SaaS (Primary `#2563eb`, Inter/Roboto).
-- **Auth:** Login/Register PASS. **Content:** Types ✓, Entries ✓ (RJSF), Tiptap ✓, Menus ✓, Media ✓.
-- **E-commerce** ✓: Orders (948L), Variants (859L), Promotions (619L) — 9 endpoint.
+### 2. Frontend (9 module DONE, 1 stub)
+- **UI/UX:** Enterprise SaaS, Primary `#2563eb`, Inter/Roboto. AntD v6, Zustand, RJSF.
+- **Core:** Auth ✓, Content Types ✓, Entries ✓ (Tiptap/RJSF), Menus ✓, Media ✓.
+- **Themes** ✓: Import ZIP, Linter, Sinh Schema, Customizer (biến CSS), và **Xem/Copy mã Liquid Templates** (Modal AntD v6).
+- **E-commerce** ✓: Orders (948L), Variants (859L), Promotions (619L) — full API.
 - **RBAC** ✓: Roles (259L), Users (371L). **Settings** ✓: SEO Redirects (323L), AI Mock (320L).
-- **Themes** ✓ (925L): Import ZIP + list + templates (`/api/themes` mới).
-- **Page Builder** ✓ (908L): `/api/blocks/{id}` PUT/DELETE. **Users** ✓ (430L): CRUD `/api/users`.
-- **STUB:** `customers/page.tsx` (18L Result placeholder) — chưa có BE.
+- **Page Builder** ✓ (908L): Dynamic Zone (GET/POST/PUT/DELETE `/api/blocks`). 
+- **Users** ✓ (430L): CRUD `/api/users`.
+- **STUB:** `customers/page.tsx` (18L Placeholder) - chưa có API Backend.
 
 ## PHẦN 5: CÁC QUYẾT ĐỊNH KIẾN TRÚC ĐÃ CHỐT
 1. Media: File lưu ở thư mục `wwwroot/uploads` của Backend, DB lưu URL tương đối. Frontend nối với `NEXT_PUBLIC_API_URL` để hiển thị.
@@ -49,9 +50,8 @@
 - `data_SmartCMS.sql`: Schema Database (27 bảng).
 - `adc-cms-admin/.cursorrules`: Quy tắc code Frontend.
 
-## PHẦN 7: NHIỆM VỤ TIẾP THEO (V6.1)
-1. **Sync `README_API.md`** (5 phút, rủi ro 0) — bổ sung Auth register, Users CRUD, Themes, Blocks. Không sync = AI sau code trùng.
-2. **Verify `/api/blocks` GET/POST** — page-builder cần list/create; nếu thiếu bổ sung `ContentEndpoints.cs`.
-3. **Customers CRM** — thay stub 18L; cần BE `GET /api/customers`, `GET /api/customers/{id}` join `cms_ecommerce_orders` + `cms_users`.
-4. **AI Settings CRUD** — bảng `cms_ai_settings` có, endpoint chưa có; FE đang mock.
-5. **Commit nợ** — 4 file modified + `themes/page.tsx` untracked.
+## PHẦN 7: NHIỆM VỤ TIẾP THEO (V6.2)
+1. **Customers CRM (High Priority):** Thay thế stub 18L bằng UI thật. Cần viết thêm BE: `GET /api/customers`, `GET /api/customers/{id}` (JOIN `cms_ecommerce_orders` + `cms_users`).
+2. **AI Settings CRUD:** Bảng `cms_ai_settings` có trong SQL nhưng BE chưa có API CRUD. FE đang dùng mock localStorage. Cần bổ sung BE (`GET/PUT /api/ai/settings/{siteId}`) và wire lại UI.
+3. **Sync & Polish:** Rà soát lại các form RJSF (xử lý edge cases), thêm loading state, responsive bảng trên mobile. Cập nhật `README_API.md` nếu có endpoint mới.
+

@@ -13,7 +13,7 @@ Dựa trên toàn bộ kiến trúc đã phân tích, dưới đây là Bản Đ
         ◦ Hợp nhất (Merge) danh sách trường của file list-*.html và detail-*.html có cùng mã data-cms-collection.
         ◦ Trích xuất văn bản và hình ảnh mẫu có sẵn trong file HTML tĩnh để tạo bản ghi mẫu ban đầu vào bảng cms_entries và cms_entry_blocks.
     4. Trình Biên dịch Liquid & Quản lý Biến Giao diện (Theme Customizer):
-        ◦ Tự động chuyển đổi các thẻ HTML có gắn data-cms-* sang mã khuôn mẫu Liquid Template và lưu vào cms_theme_templates.
+        ◦ Tự động chuyển đổi các thẻ HTML có gắn data-cms-* sang mã khuôn mẫu Liquid Template và lưu vào cms_theme_templates. Hỗ trợ xem trước, kiểm tra và Copy mã Liquid Template trực tiếp trên giao diện Admin.
         ◦ Tự động đọc các biến màu sắc/font chữ trong :root của file CSS đưa vào bảng chọn màu (Color Picker) trên Admin.
 ##Phân hệ 2: Quản trị Cấu trúc Dữ liệu Động (Dynamic Content Modeling)
 **Mục tiêu: Cho phép tạo thêm bất kỳ mô hình dữ liệu nào ngay trên giao diện Admin.**
