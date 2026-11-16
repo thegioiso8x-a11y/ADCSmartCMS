@@ -204,14 +204,14 @@ Lỗi nghiệp vụ đơn hàng: `409` khi không đủ tồn kho, `404` khi var
 
 ---
 
-## Tổng hợp nhanh (13 nhóm, 71 endpoint)
+## Tổng hợp nhanh (13 nhóm, 73 endpoint)
 
 | Nhóm | Số endpoint | File nguồn |
 |---|---|---|
 | Auth & Users | 4 | `AuthEndpoints.cs` |
 | Debug | 5 | `Program.cs`, `ThemeEndpoints.cs` |
 | Theme | 4 | `ThemeEndpoints.cs` |
-| Content | 14 | `ContentEndpoints.cs` |
+| Content | 16 | `ContentEndpoints.cs` |
 | Filter | 1 | `ContentEndpoints.cs` |
 | Workflow & Versioning | 2 | `ContentEndpoints.cs` |
 | SEO | 6 | `SeoEndpoints.cs`, `SeoRedirectEndpoints.cs` |
