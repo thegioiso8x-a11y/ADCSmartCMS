@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import TemplateViewer from './components/TemplateViewer';
 import {
   Steps, Card, Upload, Button, Space, Typography, Alert, Form, Input, Tag, Result, App, Divider,
   List, Empty, Spin, Tabs, Table, ColorPicker, Select, Row, Col,
