@@ -90,6 +90,36 @@ public static class ThemeEndpoints
             });
         });
 
+        // GET /api/themes: danh sách theme (mới nhất trước).
+        app.MapGet("/api/themes", async (IThemeRepository repo, CancellationToken ct) =>
+            Results.Ok(await repo.GetThemesAsync(ct))).RequireAuthorization();
+
+        // PUT /api/themes/{id}/variables: cập nhật chuỗi JSON theme_variables.
+        app.MapPut("/api/themes/{id:guid}/variables", async (
+            Guid id,
+            UpdateThemeVariablesRequest request,
+            IThemeRepository repo,
+            CancellationToken ct) =>
+        {
+            // theme_variables phải là JSON OBJECT (CHECK ISJSON(theme_variables, OBJECT)).
+            if (request.ThemeVariables is not { } vars || vars.ValueKind is System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined)
+                return Results.BadRequest(new { error = "themeVariables là bắt buộc." });
+            if (vars.ValueKind != System.Text.Json.JsonValueKind.Object)
+                return Results.BadRequest(new { error = "themeVariables phải là JSON object." });
+
+            var updated = await repo.UpdateThemeVariablesAsync(id, vars.GetRawText(), ct);
+            return updated is null
+                ? Results.NotFound(new { error = $"Không tìm thấy theme '{id}'." })
+                : Results.Ok(updated);
+        }).RequireAuthorization();
+
+        // GET /api/themes/{themeId}/templates: danh sách template (Liquid HTML + extracted_schema) của theme.
+        app.MapGet("/api/themes/{themeId:guid}/templates", async (
+            Guid themeId,
+            IThemeRepository repo,
+            CancellationToken ct) =>
+            Results.Ok(await repo.GetTemplatesAsync(themeId, ct))).RequireAuthorization();
+
         return app;
     }
 }

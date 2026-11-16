@@ -23,19 +23,19 @@
 
 ## PHẦN 4: TRẠNG THÁI DỰ ÁN HIỆN TẠI
 ### 1. Backend (100% COMPLETED & TESTED)
-- Full 58 Endpoints PASS (Auth, Content Types, Entries, Menus, E-commerce, SEO, Forms, RBAC).
+- Full ~69 Endpoints PASS (58 gốc + Auth Users ×3 + Themes ×2 + Blocks ×2 chưa doc) (Auth, Content Types, Entries, Menus, E-commerce, SEO, Forms, RBAC).
 - Đã fix các lỗi Dapper `DBNull` (dùng Anonymous Object thay vì `DbString`).
 - Đã fix lỗi Circular Reference trong Menu.
 
-### 2. Frontend (Đã xong ~80% Giao diện cốt lõi)
-- **UI/UX:** Đã áp dụng theme "Enterprise SaaS" (Sidebar trắng, Header trắng, màu Primary xanh dương `#2563eb`, font Inter/Roboto).
-- **Auth:** Trang Login PASS.
-- **Content Types:** CRUD đầy đủ (Types + Fields).
-- **Entries:** CRUD đầy đủ, tích hợp RJSF.
-- **Tiptap Editor:** Đã tích hợp thành công, có đủ 4 nhóm công cụ (Định dạng, Cấu trúc, Media, Hỗ trợ). Đã fix CSS cho Bảng (Table). Đã kết nối chèn Ảnh/Video với `MediaPickerModal`.
-- **Menus:** CRUD đầy đủ + Kéo thả đa cấp (`@dnd-kit`).
-- **Media:** CRUD đầy đủ (Cây thư mục, Upload file, Xem ảnh).
-- **ĐANG DỞ:** Chưa làm giao diện E-commerce (Orders, Variants, Promotions), RBAC (Ma trận phân quyền), Settings (SEO Redirects, AI Settings).
+### 2. Frontend (7 module DONE, 1 stub)
+- **UI/UX:** Enterprise SaaS (Primary `#2563eb`, Inter/Roboto).
+- **Auth:** Login/Register PASS. **Content:** Types ✓, Entries ✓ (RJSF), Tiptap ✓, Menus ✓, Media ✓.
+- **E-commerce** ✓: Orders (948L), Variants (859L), Promotions (619L) — 9 endpoint.
+- **RBAC** ✓: Roles (259L), Users (371L). **Settings** ✓: SEO Redirects (323L), AI Mock (320L).
+- **Themes** ✓ (925L): Import ZIP + list + templates (`/api/themes` mới).
+- **Page Builder** ✓ (908L): `/api/blocks/{id}` PUT/DELETE. **Users** ✓ (430L): CRUD `/api/users`.
+- **STUB:** `customers/page.tsx` (18L Result placeholder) — chưa có BE.
+
 ## PHẦN 5: CÁC QUYẾT ĐỊNH KIẾN TRÚC ĐÃ CHỐT
 1. Media: File lưu ở thư mục `wwwroot/uploads` của Backend, DB lưu URL tương đối. Frontend nối với `NEXT_PUBLIC_API_URL` để hiển thị.
 2. Editor: Dùng Tiptap (MIT License) để tránh rủi ro bản quyền như TinyMCE/CKEditor.
@@ -43,12 +43,15 @@
 4. Next.js: Tắt rule `@typescript-eslint/no-explicit-any` nhưng code phải sạch (dùng `unknown` + type guard).
 ## PHẦN 6: CÁC FILE SOURCE OF TRUTH
 - `readme.md`: Yêu cầu nghiệp vụ.
-- `README_API.md`: Danh sách API (58 endpoints).
+- `README_API.md`: 58 endpoints — **CHƯA ĐỒNG BỘ**: thiếu Auth register, Users ×3, Themes ×2, Blocks ×2.
+- `src/AdcSmartCms.Api/Endpoints/AuthEndpoints.cs`: `/api/users` CRUD (chưa doc).
+- `src/AdcSmartCms.Api/Endpoints/ThemeEndpoints.cs`: `/api/themes`, `/api/themes/{id}/templates` (chưa doc).
 - `data_SmartCMS.sql`: Schema Database (27 bảng).
 - `adc-cms-admin/.cursorrules`: Quy tắc code Frontend.
 
-## PHẦN 7: NHIỆM VỤ TIẾP THEO NGAY LẬP TỨC
-1. **Frontend (E-commerce):** Tạo trang `/dashboard/ecommerce` với 3 tab: Orders, Variants, Promotions. Gọi các API tương ứng.
-2. **Frontend (RBAC):** Tạo trang `/dashboard/rbac` hiển thị danh sách Roles và User, có nút gán quyền.
-3. **Frontend (Settings):** Tạo trang `/dashboard/settings` cho SEO Redirects và cấu hình AI.
-
+## PHẦN 7: NHIỆM VỤ TIẾP THEO (V6.1)
+1. **Sync `README_API.md`** (5 phút, rủi ro 0) — bổ sung Auth register, Users CRUD, Themes, Blocks. Không sync = AI sau code trùng.
+2. **Verify `/api/blocks` GET/POST** — page-builder cần list/create; nếu thiếu bổ sung `ContentEndpoints.cs`.
+3. **Customers CRM** — thay stub 18L; cần BE `GET /api/customers`, `GET /api/customers/{id}` join `cms_ecommerce_orders` + `cms_users`.
+4. **AI Settings CRUD** — bảng `cms_ai_settings` có, endpoint chưa có; FE đang mock.
+5. **Commit nợ** — 4 file modified + `themes/page.tsx` untracked.

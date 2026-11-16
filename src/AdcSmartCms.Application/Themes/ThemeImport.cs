@@ -13,6 +13,35 @@ public sealed record ThemeTemplateInsert(string TemplateKey, string TemplateType
 
 public sealed record ThemeCreated(Guid ThemeId, IReadOnlyList<Guid> TemplateIds);
 
+// ---------- Theme Customizer (danh sách + biến giao diện) ----------
+
+/// <summary>Một theme trong GET /api/themes (bảng cms_themes).</summary>
+public sealed class ThemeListItemDto
+{
+    public Guid Id { get; set; }
+    public string ThemeCode { get; set; } = string.Empty;
+    public string ThemeName { get; set; } = string.Empty;
+    public string Version { get; set; } = string.Empty;
+    public string AssetsBaseUrl { get; set; } = string.Empty;
+    public string? ThumbnailUrl { get; set; }
+    public string ThemeVariables { get; set; } = "{}";   // JSON string (raw)
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Body của PUT /api/themes/{id}/variables.</summary>
+public sealed record UpdateThemeVariablesRequest(System.Text.Json.JsonElement? ThemeVariables);
+
+/// <summary>Một template trong GET /api/themes/{themeId}/templates (bảng cms_theme_templates).</summary>
+public sealed class ThemeTemplateDto
+{
+    public Guid Id { get; set; }
+    public string TemplateKey { get; set; } = string.Empty;
+    public string TemplateType { get; set; } = string.Empty;
+    public string CompiledHtml { get; set; } = string.Empty;      // HTML Liquid (raw)
+    public string ExtractedSchema { get; set; } = "{}";           // JSON string (raw)
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public interface IThemeRepository
 {
     /// <summary>
@@ -20,6 +49,15 @@ public interface IThemeRepository
     /// Trả null nếu theme_code đã tồn tại (vi phạm UQ_cms_themes_code); khi đó không có gì được ghi.
     /// </summary>
     Task<ThemeCreated?> CreateAsync(ThemeInsert theme, IReadOnlyList<ThemeTemplateInsert> templates, CancellationToken ct);
+
+    /// <summary>Danh sách theme (mới nhất trước).</summary>
+    Task<IReadOnlyList<ThemeListItemDto>> GetThemesAsync(CancellationToken ct);
+
+    /// <summary>Cập nhật theme_variables (JSON object). Trả null nếu theme không tồn tại.</summary>
+    Task<ThemeListItemDto?> UpdateThemeVariablesAsync(Guid themeId, string themeVariablesJson, CancellationToken ct);
+
+    /// <summary>Danh sách template của 1 theme (sắp theo template_key).</summary>
+    Task<IReadOnlyList<ThemeTemplateDto>> GetTemplatesAsync(Guid themeId, CancellationToken ct);
 }
 
 // ---------- Import use-case ----------

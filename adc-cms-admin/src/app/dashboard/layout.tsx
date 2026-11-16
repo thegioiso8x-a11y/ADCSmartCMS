@@ -7,7 +7,7 @@ import {
   PictureOutlined, TeamOutlined, SettingOutlined,
   SearchOutlined, BellOutlined, ExportOutlined, LogoutOutlined,
   DatabaseOutlined, BuildOutlined, UserOutlined, SafetyCertificateOutlined,
-  QuestionCircleOutlined, ShoppingCartOutlined,
+  QuestionCircleOutlined, ShoppingCartOutlined, LayoutOutlined,
 } from '@ant-design/icons';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -50,6 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       label: 'Cấu trúc & Giao diện',
       children: [
         { key: '/dashboard/content-types', icon: <DatabaseOutlined />, label: 'Cấu trúc dữ liệu' },
+        { key: '/dashboard/themes', icon: <LayoutOutlined />, label: 'Quản lý Giao diện' },
         { key: '/dashboard/menus', icon: <MenuOutlined />, label: 'Quản lý Menu' },
         { key: '/dashboard/page-builder', icon: <BuildOutlined />, label: 'Page Builder' },
       ],

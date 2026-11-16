@@ -26,6 +26,37 @@ public sealed class ThemeRepository : IThemeRepository
         VALUES (@ThemeId, @TemplateKey, @TemplateType, @CompiledHtml, @ExtractedSchema);
         """;
 
+    private const string SelectThemesSql = """
+        SELECT id AS Id, theme_code AS ThemeCode, theme_name AS ThemeName, version AS Version,
+               assets_base_url AS AssetsBaseUrl, thumbnail_url AS ThumbnailUrl,
+               theme_variables AS ThemeVariables, created_at AS CreatedAt
+        FROM dbo.cms_themes
+        ORDER BY created_at DESC;
+        """;
+
+    private const string SelectThemeByIdSql = """
+        SELECT id AS Id, theme_code AS ThemeCode, theme_name AS ThemeName, version AS Version,
+               assets_base_url AS AssetsBaseUrl, thumbnail_url AS ThumbnailUrl,
+               theme_variables AS ThemeVariables, created_at AS CreatedAt
+        FROM dbo.cms_themes
+        WHERE id = @ThemeId;
+        """;
+
+    private const string UpdateThemeVariablesSql = """
+        UPDATE dbo.cms_themes
+        SET theme_variables = @ThemeVariables
+        WHERE id = @ThemeId;
+        """;
+
+    private const string SelectTemplatesSql = """
+        SELECT id AS Id, template_key AS TemplateKey, template_type AS TemplateType,
+               compiled_html AS CompiledHtml, extracted_schema AS ExtractedSchema,
+               updated_at AS UpdatedAt
+        FROM dbo.cms_theme_templates
+        WHERE theme_id = @ThemeId
+        ORDER BY template_key;
+        """;
+
     private readonly IDbConnectionFactory _factory;
 
     public ThemeRepository(IDbConnectionFactory factory) => _factory = factory;
@@ -68,6 +99,44 @@ public sealed class ThemeRepository : IThemeRepository
         {
             return null; // using tx => rollback khi Dispose
         }
+    }
+
+    public async Task<IReadOnlyList<ThemeListItemDto>> GetThemesAsync(CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        var rows = await conn.QueryAsync<ThemeListItemDto>(new CommandDefinition(
+            SelectThemesSql, cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    public async Task<ThemeListItemDto?> UpdateThemeVariablesAsync(Guid themeId, string themeVariablesJson, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        // Anonymous object: Dapper tự map null -> DBNull.Value (không dùng DbString cho cột nullable).
+        var affected = await conn.ExecuteAsync(new CommandDefinition(UpdateThemeVariablesSql, new
+        {
+            ThemeId = themeId,
+            ThemeVariables = themeVariablesJson   // NVARCHAR(MAX) JSON object
+        }, cancellationToken: ct));
+
+        if (affected == 0) return null;
+
+        return await conn.QuerySingleOrDefaultAsync<ThemeListItemDto>(new CommandDefinition(
+            SelectThemeByIdSql, new { ThemeId = themeId }, cancellationToken: ct));
+    }
+
+    public async Task<IReadOnlyList<ThemeTemplateDto>> GetTemplatesAsync(Guid themeId, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        var rows = await conn.QueryAsync<ThemeTemplateDto>(new CommandDefinition(
+            SelectTemplatesSql, new { ThemeId = themeId }, cancellationToken: ct));
+        return rows.ToList();
     }
 
     private static DbString Ansi(string value, int length) =>
