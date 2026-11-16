@@ -18,6 +18,16 @@ Tất cả body/response dùng `application/json` (trừ sitemap trả `applicat
 
 ---
 
+
+## 1.5. Auth & Users (Quản trị viên)
+| Method | Route | Mô tả | Params chính |
+|---|---|---|---|
+| GET | `/api/users` | Danh sách user (không chứa password), mới nhất trước | Không |
+| POST | `/api/users` | Tạo user mới | Body: `email` (bắt buộc), `password` (>=6 ký tự), `fullName` (bắt buộc). Trùng email → `409` |
+| PUT | `/api/users/{id}` | Cập nhật user (null = giữ nguyên) | Route: `id`; Body: `password` (nếu có phải >=6 ký tự), `fullName`, `avatarUrl`, `isSuperAdmin`, `isActive` |
+| DELETE | `/api/users/{id}` | Xóa user (cascade xóa user_roles) | Route: `id` |
+
+---
 ## 2. Theme
 
 | Method | Route | Mô tả | Params chính |
@@ -25,7 +35,10 @@ Tất cả body/response dùng `application/json` (trừ sitemap trả `applicat
 | POST | `/api/debug/import-theme` | (Xem nhóm Debug) Import gói theme ZIP vào DB | Form-data: `file`, `assetsBaseUrl`, `themeCode`, `themeName`, `version` |
 | POST | `/api/debug/generate-schema/{themeId}` | (Xem nhóm Debug) Sinh schema động từ theme | Route: `themeId` |
 
-> Ghi chú: hiện theme được phục vụ qua 2 endpoint debug ở trên (`ThemeEndpoints.cs`).
+| PUT | `/api/themes/{id}/variables` | Cập nhật CSS variables (`theme_variables` JSON object) | Route: `id`; Body: `themeVariables` (bắt buộc, phải là JSON object) |
+| GET | `/api/themes/{themeId}/templates` | Danh sách template của theme (Liquid HTML + schema) | Route: `themeId` |
+
+> Ghi chú: hiện theme được phục vụ qua các endpoint trên (`ThemeEndpoints.cs`).
 
 ---
 
@@ -46,8 +59,10 @@ Tất cả body/response dùng `application/json` (trừ sitemap trả `applicat
 | PUT | `/api/entries/{entryId}` | Cập nhật entry (`base_data` + locale `title`/`slug`/`localized_data`) rồi đồng bộ index | Route: `entryId`; Body: `title`, `slug`, `baseData` (JSON object), `localizedData` (JSON object), `locale` (mặc định `vi`) |
 | DELETE | `/api/entries/{entryId}` | Xóa entry (bảng con xóa theo CASCADE) | Route: `entryId` |
 
----
+| PUT | `/api/blocks/{blockId}` | Cập nhật khối (null = giữ nguyên) | Route: `blockId`; Body: `blockData` (JSON object), `sortOrder`, `isVisible` |
+| DELETE | `/api/blocks/{blockId}` | Xóa khối | Route: `blockId` |
 
+---
 ## 4. Filter (Faceted Filter)
 
 | Method | Route | Mô tả | Params chính |
@@ -189,13 +204,14 @@ Lỗi nghiệp vụ đơn hàng: `409` khi không đủ tồn kho, `404` khi var
 
 ---
 
-## Tổng hợp nhanh (12 nhóm, 64 endpoint)
+## Tổng hợp nhanh (13 nhóm, 71 endpoint)
 
 | Nhóm | Số endpoint | File nguồn |
 |---|---|---|
+| Auth & Users | 4 | `AuthEndpoints.cs` |
 | Debug | 5 | `Program.cs`, `ThemeEndpoints.cs` |
-| Theme | 2 | `ThemeEndpoints.cs` |
-| Content | 12 | `ContentEndpoints.cs` |
+| Theme | 4 | `ThemeEndpoints.cs` |
+| Content | 14 | `ContentEndpoints.cs` |
 | Filter | 1 | `ContentEndpoints.cs` |
 | Workflow & Versioning | 2 | `ContentEndpoints.cs` |
 | SEO | 6 | `SeoEndpoints.cs`, `SeoRedirectEndpoints.cs` |
