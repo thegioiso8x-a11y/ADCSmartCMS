@@ -206,6 +206,63 @@ public static class ContentEndpoints
         app.MapGet("/api/entries/{entryId:guid}/versions", async (Guid entryId, IContentRepository repo, CancellationToken ct) =>
             Results.Ok(await repo.GetVersionsAsync(entryId, ct)));
 
+        // ---------- Page Builder: cms_entry_blocks ----------
+
+        // GET /api/entries/{entryId}/blocks?locale=vi: danh sách khối của entry theo locale (sort_order ASC).
+        app.MapGet("/api/entries/{entryId:guid}/blocks", async (Guid entryId, string? locale, IContentRepository repo, CancellationToken ct) =>
+        {
+            var loc = string.IsNullOrWhiteSpace(locale) ? "vi" : locale.Trim();
+            return Results.Ok(await repo.GetBlocksAsync(entryId, loc, ct));
+        }).RequireAuthorization();
+
+        // POST /api/entries/{entryId}/blocks: tạo khối mới cho entry.
+        app.MapPost("/api/entries/{entryId:guid}/blocks", async (Guid entryId, CreateBlockRequest request, IContentRepository repo, CancellationToken ct) =>
+        {
+            if (request.ComponentTypeId == Guid.Empty)
+                return Results.BadRequest(new { error = "componentTypeId là bắt buộc." });
+
+            EntryBlockDto? created;
+            try
+            {
+                created = await repo.CreateBlockAsync(entryId, request, ct);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+
+            return created is null
+                ? Results.NotFound(new { error = $"Không tìm thấy entry '{entryId}' hoặc component type '{request.ComponentTypeId}'." })
+                : Results.Json(created, statusCode: StatusCodes.Status201Created);
+        }).RequireAuthorization();
+
+        // PUT /api/blocks/{blockId}: cập nhật khối (null = giữ nguyên).
+        app.MapPut("/api/blocks/{blockId:guid}", async (Guid blockId, UpdateBlockRequest request, IContentRepository repo, CancellationToken ct) =>
+        {
+            EntryBlockDto? updated;
+            try
+            {
+                updated = await repo.UpdateBlockAsync(blockId, request, ct);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+
+            return updated is null
+                ? Results.NotFound(new { error = $"Không tìm thấy block '{blockId}'." })
+                : Results.Ok(updated);
+        }).RequireAuthorization();
+
+        // DELETE /api/blocks/{blockId}: xóa khối.
+        app.MapDelete("/api/blocks/{blockId:guid}", async (Guid blockId, IContentRepository repo, CancellationToken ct) =>
+        {
+            var deleted = await repo.DeleteBlockAsync(blockId, ct);
+            return deleted
+                ? Results.Ok(new { blockId, status = "deleted" })
+                : Results.NotFound(new { error = $"Không tìm thấy block '{blockId}'." });
+        }).RequireAuthorization();
+
         return app;
     }
 

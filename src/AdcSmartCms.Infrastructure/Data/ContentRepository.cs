@@ -194,6 +194,44 @@ public sealed class ContentRepository : IContentRepository
         ORDER BY l.updated_at DESC;
         """;
 
+    // ---------- Page Builder: cms_entry_blocks ----------
+
+    private const string SelectBlocksSql = """
+        SELECT id AS Id, entry_id AS EntryId, locale AS Locale, zone_key AS ZoneKey,
+               component_type_id AS ComponentTypeId, block_data AS BlockData,
+               sort_order AS SortOrder, is_visible AS IsVisible
+        FROM dbo.cms_entry_blocks
+        WHERE entry_id = @EntryId AND locale = @Locale
+        ORDER BY sort_order ASC;
+        """;
+
+    private const string SelectBlockByIdSql = """
+        SELECT id AS Id, entry_id AS EntryId, locale AS Locale, zone_key AS ZoneKey,
+               component_type_id AS ComponentTypeId, block_data AS BlockData,
+               sort_order AS SortOrder, is_visible AS IsVisible
+        FROM dbo.cms_entry_blocks
+        WHERE id = @BlockId;
+        """;
+
+    private const string EntryExistsByIdSql = "SELECT COUNT(1) FROM dbo.cms_entries WHERE id = @EntryId;";
+
+    private const string InsertBlockSql = """
+        INSERT INTO dbo.cms_entry_blocks
+            (entry_id, locale, zone_key, component_type_id, block_data, sort_order, is_visible)
+        OUTPUT INSERTED.id
+        VALUES (@EntryId, @Locale, @ZoneKey, @ComponentTypeId, @BlockData, @SortOrder, @IsVisible);
+        """;
+
+    private const string UpdateBlockSql = """
+        UPDATE dbo.cms_entry_blocks
+        SET block_data = COALESCE(@BlockData, block_data),
+            sort_order = COALESCE(@SortOrder, sort_order),
+            is_visible = COALESCE(@IsVisible, is_visible)
+        WHERE id = @BlockId;
+        """;
+
+    private const string DeleteBlockSql = "DELETE FROM dbo.cms_entry_blocks WHERE id = @BlockId;";
+
     private readonly IDbConnectionFactory _factory;
 
     public ContentRepository(IDbConnectionFactory factory) => _factory = factory;
@@ -529,6 +567,92 @@ public sealed class ContentRepository : IContentRepository
         if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
 
         var affected = await conn.ExecuteAsync(new CommandDefinition(DeleteFieldSql, new { FieldId = fieldId }, cancellationToken: ct));
+        return affected > 0;
+    }
+
+    // ---------- Page Builder: cms_entry_blocks ----------
+
+    public async Task<IReadOnlyList<EntryBlockDto>> GetBlocksAsync(Guid entryId, string locale, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        var localeCode = Ansi(string.IsNullOrWhiteSpace(locale) ? "vi" : locale, 10);
+        var rows = await conn.QueryAsync<EntryBlockDto>(new CommandDefinition(
+            SelectBlocksSql, new { EntryId = entryId, Locale = localeCode }, cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    public async Task<EntryBlockDto?> CreateBlockAsync(Guid entryId, CreateBlockRequest request, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        // Entry phải tồn tại (FK_blocks_entry).
+        var entryExists = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
+            EntryExistsByIdSql, new { EntryId = entryId }, cancellationToken: ct));
+        if (entryExists == 0) return null;
+
+        // component_type_id phải tồn tại (FK_blocks_component_type).
+        var ctExists = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
+            ContentTypeExistsByIdSql, new { ContentTypeId = request.ComponentTypeId }, cancellationToken: ct));
+        if (ctExists == 0) return null;
+
+        // block_data phải là JSON OBJECT (CHECK ISJSON(..., OBJECT)).
+        var blockData = ToJsonObject(request.BlockData);
+
+        // Anonymous object: Dapper tự map null -> DBNull.Value (không dùng DbString cho cột nullable).
+        var blockId = await conn.ExecuteScalarAsync<Guid>(new CommandDefinition(InsertBlockSql, new
+        {
+            EntryId = entryId,
+            Locale = Ansi(string.IsNullOrWhiteSpace(request.Locale) ? "vi" : request.Locale, 10),
+            ZoneKey = Ansi(string.IsNullOrWhiteSpace(request.ZoneKey) ? "main_layout" : request.ZoneKey, 100),
+            request.ComponentTypeId,
+            BlockData = blockData,
+            request.SortOrder,
+            request.IsVisible
+        }, cancellationToken: ct));
+
+        return await conn.QuerySingleOrDefaultAsync<EntryBlockDto>(new CommandDefinition(
+            SelectBlockByIdSql, new { BlockId = blockId }, cancellationToken: ct));
+    }
+
+    public async Task<EntryBlockDto?> UpdateBlockAsync(Guid blockId, UpdateBlockRequest request, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        // blockData: null => giữ nguyên; có giá trị => phải là JSON object.
+        string? blockData = null;
+        if (request.BlockData is { } bd && bd.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
+        {
+            if (bd.ValueKind != JsonValueKind.Object)
+                throw new ArgumentException("blockData phải là JSON object.");
+            blockData = bd.GetRawText();
+        }
+
+        // Anonymous object: null -> DBNull.Value (COALESCE giữ nguyên giá trị cũ).
+        var affected = await conn.ExecuteAsync(new CommandDefinition(UpdateBlockSql, new
+        {
+            BlockId = blockId,
+            BlockData = blockData,
+            request.SortOrder,
+            request.IsVisible
+        }, cancellationToken: ct));
+
+        if (affected == 0) return null;
+
+        return await conn.QuerySingleOrDefaultAsync<EntryBlockDto>(new CommandDefinition(
+            SelectBlockByIdSql, new { BlockId = blockId }, cancellationToken: ct));
+    }
+
+    public async Task<bool> DeleteBlockAsync(Guid blockId, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        var affected = await conn.ExecuteAsync(new CommandDefinition(
+            DeleteBlockSql, new { BlockId = blockId }, cancellationToken: ct));
         return affected > 0;
     }
 

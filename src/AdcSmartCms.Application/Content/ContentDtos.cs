@@ -177,6 +177,39 @@ public sealed class EntryDetailResponse
     public string? Status { get; set; }
 }
 
+// ---------- Page Builder: cms_entry_blocks ----------
+// Bảng cms_entry_blocks: id, entry_id, locale VARCHAR(10), zone_key VARCHAR(100),
+//   component_type_id (FK cms_content_types), block_data NVARCHAR(MAX) CHECK ISJSON(OBJECT),
+//   sort_order INT, is_visible BIT.
+
+/// <summary>Một khối giao diện động của entry (bảng cms_entry_blocks).</summary>
+public sealed class EntryBlockDto
+{
+    public Guid Id { get; set; }
+    public Guid EntryId { get; set; }
+    public string Locale { get; set; } = "vi";
+    public string ZoneKey { get; set; } = "main_layout";
+    public Guid ComponentTypeId { get; set; }
+    public string BlockData { get; set; } = "{}";   // JSON string (raw)
+    public int SortOrder { get; set; }
+    public bool IsVisible { get; set; }
+}
+
+/// <summary>Body của POST /api/entries/{entryId}/blocks.</summary>
+public sealed record CreateBlockRequest(
+    string Locale,
+    string ZoneKey,
+    Guid ComponentTypeId,
+    JsonElement? BlockData,
+    int SortOrder = 0,
+    bool IsVisible = true);
+
+/// <summary>Body của PUT /api/blocks/{blockId}. null = giữ nguyên.</summary>
+public sealed record UpdateBlockRequest(
+    JsonElement? BlockData,
+    int? SortOrder,
+    bool? IsVisible);
+
 public interface IContentRepository
 {
     /// <summary>
@@ -239,4 +272,18 @@ public interface IContentRepository
 
     /// <summary>Xóa field; trả false nếu không tồn tại.</summary>
     Task<bool> DeleteFieldAsync(Guid fieldId, CancellationToken ct);
+
+    // ---------- Page Builder: cms_entry_blocks ----------
+
+    /// <summary>Danh sách khối của entry theo locale (sắp theo sort_order ASC).</summary>
+    Task<IReadOnlyList<EntryBlockDto>> GetBlocksAsync(Guid entryId, string locale, CancellationToken ct);
+
+    /// <summary>Tạo khối mới; trả null nếu entry hoặc component type không tồn tại.</summary>
+    Task<EntryBlockDto?> CreateBlockAsync(Guid entryId, CreateBlockRequest request, CancellationToken ct);
+
+    /// <summary>Cập nhật khối (null = giữ nguyên). Trả null nếu không tồn tại.</summary>
+    Task<EntryBlockDto?> UpdateBlockAsync(Guid blockId, UpdateBlockRequest request, CancellationToken ct);
+
+    /// <summary>Xóa khối. Trả false nếu không tồn tại.</summary>
+    Task<bool> DeleteBlockAsync(Guid blockId, CancellationToken ct);
 }
