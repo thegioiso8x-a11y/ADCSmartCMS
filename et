@@ -1,0 +1,23 @@
+[33mcommit e2421a25dd081cc1a2899e0951d81faa014f2c48[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Vuong adc <vuong@gmail.com>
+Date:   Tue Nov 17 10:12:31 2026 +0700
+
+    Cập nhật ngày 17-11
+
+ HANDOFF.md                                                        |  71 [32m+++[m[31m--[m
+ README_API.md                                                     |  57 [32m+++[m[31m-[m
+ adc-cms-admin/src/app/dashboard/customers/page.tsx                | 426 [32m++++++++++++++++++++++++++++[m[31m-[m
+ .../src/app/dashboard/ecommerce/components/OrdersTab.tsx          |   3 [32m+[m
+ .../src/app/dashboard/ecommerce/components/VariantsTab.tsx        |   3 [32m+[m
+ adc-cms-admin/src/app/dashboard/entries/page.tsx                  |  41 [32m++[m[31m-[m
+ .../src/app/dashboard/settings/components/AiSettingsTab.tsx       | 187 [32m++++++++++[m[31m---[m
+ adc-cms-admin/src/components/DynamicFormWrapper.tsx               |  95 [32m++++++[m[31m-[m
+ adc-cms-admin/src/lib/types.ts                                    |   3 [32m+[m
+ src/AdcSmartCms.Api/Endpoints/AiEndpoints.cs                      |  38 [32m+++[m
+ src/AdcSmartCms.Api/Endpoints/CustomerEndpoints.cs                |  35 [32m+++[m
+ src/AdcSmartCms.Api/Program.cs                                    |   5 [32m+[m
+ src/AdcSmartCms.Application/Ai/AiSettingsDtos.cs                  |  51 [32m++++[m
+ src/AdcSmartCms.Application/Customers/CustomerDtos.cs             |  61 [32m+++++[m
+ src/AdcSmartCms.Infrastructure/Data/AiSettingsRepository.cs       | 250 [32m+++++++++++++++++[m
+ src/AdcSmartCms.Infrastructure/Data/CustomerRepository.cs         | 223 [32m+++++++++++++++[m
+ 16 files changed, 1449 insertions(+), 100 deletions(-)

@@ -47,10 +47,44 @@ function mapFieldType(fieldType: string): { type: string; format?: string } {
     case 'rich_text':
       // format 'rich_text' -> DynamicFormWrapper gán RichTextWidget (Tiptap).
       return { type: 'string', format: 'rich_text' };
+    case 'media':
+      // format 'media' -> DynamicFormWrapper gán MediaWidget (Modal chọn ảnh).
+      return { type: 'string', format: 'media' };
     default:
-      // string, text, media, relation, dynamic_zone...
+      // string, text, relation, dynamic_zone...
       return { type: 'string' };
   }
+}
+
+/** Parse an toàn chuỗi JSON validation_rules -> Record. */
+function parseValidationRules(raw?: string | null): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Áp validation_rules (min/max/minLength/maxLength/pattern) vào JSON Schema property. */
+function applyValidationRules(prop: Record<string, unknown>, rules: Record<string, unknown>): void {
+  const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
+  const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length > 0 ? v : undefined);
+
+  const min = num(rules.min);
+  const max = num(rules.max);
+  const minLength = num(rules.minLength ?? rules.min_length);
+  const maxLength = num(rules.maxLength ?? rules.max_length);
+  const pattern = str(rules.pattern ?? rules.regex);
+
+  if (min !== undefined) prop.minimum = min;
+  if (max !== undefined) prop.maximum = max;
+  if (minLength !== undefined) prop.minLength = minLength;
+  if (maxLength !== undefined) prop.maxLength = maxLength;
+  if (pattern !== undefined) prop.pattern = pattern;
 }
 
 /** Sinh JSON Schema cho RJSF từ danh sách FieldDefinition của Content Type. */
@@ -68,6 +102,8 @@ function buildSchema(fields: FieldDefinition[]): RJSFSchema {
     if (mapped.type === 'array') {
       prop.items = { type: 'string' };
     }
+    // Áp validation_rules từ cấu hình field (nếu có).
+    applyValidationRules(prop, parseValidationRules(f.validationRules));
     properties[f.fieldKey] = prop;
     if (f.isRequired) required.push(f.fieldKey);
   }
@@ -296,6 +332,7 @@ export default function EntriesPage() {
       dataIndex: 'slug',
       key: 'slug',
       width: 240,
+      responsive: ['md'],
       render: (v: string | null) => <span className="font-mono text-xs text-slate-500">{v || '—'}</span>,
     },
     {
@@ -317,6 +354,7 @@ export default function EntriesPage() {
       dataIndex: 'publishedAt',
       key: 'publishedAt',
       width: 180,
+      responsive: ['lg'],
       render: (v: string | null) =>
         v ? <span className="text-slate-600">{dayjs(v).format('DD/MM/YYYY HH:mm')}</span> : <span className="text-slate-400">—</span>,
     },
@@ -412,6 +450,7 @@ export default function EntriesPage() {
           columns={columns}
           dataSource={entries}
           loading={loading}
+          scroll={{ x: 'max-content' }}
           locale={{
             emptyText: (
               <Empty

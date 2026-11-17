@@ -21,6 +21,8 @@ export interface FieldDefinition {
   /** Backend hiện chưa trả về; optional để UI hiển thị an toàn. */
   isFilterable?: boolean;
   isLocalized?: boolean;
+  /** Chuỗi JSON validation_rules (min/max/pattern/...) nếu backend trả về. */
+  validationRules?: string | null;
 }
 
 /** Một dòng trong GET /api/entries/filter -> FilteredEntryItem */
@@ -123,3 +125,4 @@ export interface MediaAsset {
   uploadedBy?: string | null;
   createdAt: string;
 }
+

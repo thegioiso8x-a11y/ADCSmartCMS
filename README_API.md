@@ -169,7 +169,7 @@ Lỗi nghiệp vụ đơn hàng: `409` khi không đủ tồn kho, `404` khi var
 
 ---
 
-## 11. AI (Mock - không gọi API thật)
+## 11. AI (Mock + Settings CRUD)
 
 | Method | Route | Mô tả | Params chính |
 |---|---|---|---|
@@ -177,6 +177,15 @@ Lỗi nghiệp vụ đơn hàng: `409` khi không đủ tồn kho, `404` khi var
 | POST | `/api/ai/translate` | Dịch văn bản (Mock, bọc nhãn `[Translated to XX]`) | Body: `text` (bắt buộc), `sourceLang` (mặc định `vi`), `targetLang` (bắt buộc) |
 
 > `MockAiService` trả `provider = "mock"`, `isMock = true`. Thay bằng implementation thật (đọc `cms_ai_settings`) khi cần.
+
+### AI Settings CRUD (chỉ Super Admin — `is_super_admin = true`, ngược lại `403`)
+
+| Method | Route | Mô tả | Params chính |
+|---|---|---|---|
+| GET | `/api/ai/settings/{siteId}` | Lấy cấu hình AI của site (key đã mask `sk-...abcd`). Lazy reset `tokens_used_this_month = 0` nếu `updated_at` thuộc tháng/năm trước | Route: `siteId` (GUID) |
+| PUT | `/api/ai/settings/{siteId}` | Upsert cấu hình AI. `apiKey` chứa `...` (masked) → giữ nguyên key cũ; key mới → mã hóa AES-256 (master key từ ENV `ADC_AI_MASTER_KEY`) | Route: `siteId`; Body: `provider`, `apiKey`, `defaultTextModel`, `defaultVisionModel`, `promptConfigs` (JSON object), `monthlyTokenLimit`, `isEnabled` |
+
+> Response không bao giờ trả key thật. Thiếu ENV `ADC_AI_MASTER_KEY` khi lưu key mới → `500` với thông báo rõ.
 
 ---
 
@@ -195,6 +204,32 @@ Lỗi nghiệp vụ đơn hàng: `409` khi không đủ tồn kho, `404` khi var
 
 ---
 
+## 13. Customers CRM (tổng hợp từ đơn hàng)
+
+Khách hàng được tổng hợp từ bảng `cms_ecommerce_orders`:
+- `customer_id != NULL` → khách có tài khoản (JOIN `cms_users`).
+- `customer_id IS NULL` → khách vãng lai, thông tin lấy từ JSON `shipping_info` (`fullName`/`full_name`/`name`, `phone`, `email`, `address`).
+
+Mỗi khách có `customerKey`: `user:{userId}` hoặc `guest:{phone|email|name}` (dùng làm `{id}` cho endpoint chi tiết).
+
+| Method | Route | Mô tả | Params chính |
+|---|---|---|---|
+| GET | `/api/customers` | Danh sách khách hàng của site (sắp theo lần mua gần nhất giảm dần) | Query: `siteId` (bắt buộc), `keyword` (tùy chọn — lọc theo tên/SĐT/email) |
+| GET | `/api/customers/{id}` | Chi tiết khách + lịch sử đơn hàng | Route: `id` (CustomerKey); Query: `siteId` (bắt buộc) |
+
+Response `/api/customers` (mỗi phần tử):
+```json
+{ "customerKey": "guest:0901234567", "isRegistered": false, "userId": null,
+  "fullName": "Nguyen Van A", "phone": "0901234567", "email": null, "address": "...",
+  "orderCount": 3, "totalSpent": 1500000, "lastOrderAt": "...", "firstOrderAt": "..." }
+```
+
+Response `/api/customers/{id}`: `{ "customer": { ...CustomerListItemDto }, "orders": [ { "id", "orderCode", "orderStatus", "paymentStatus", "paymentMethod", "totalAmount", "couponCode", "createdAt" } ] }`
+
+> `404` khi không tìm thấy khách theo `customerKey`.
+
+---
+
 ## Quy ước lỗi chung
 
 - `400 Bad Request`: thiếu/sai tham số (`{ "error": "..." }`).
@@ -204,22 +239,26 @@ Lỗi nghiệp vụ đơn hàng: `409` khi không đủ tồn kho, `404` khi var
 
 ---
 
-## Tổng hợp nhanh (13 nhóm, 73 endpoint)
+
+## Tổng hợp nhanh (14 nhóm, 88 endpoint)
 
 | Nhóm | Số endpoint | File nguồn |
 |---|---|---|
-| Auth & Users | 4 | `AuthEndpoints.cs` |
-| Debug | 5 | `Program.cs`, `ThemeEndpoints.cs` |
-| Theme | 4 | `ThemeEndpoints.cs` |
-| Content | 16 | `ContentEndpoints.cs` |
+| Auth & Users | 7 | `AuthEndpoints.cs` |
+| Debug | 3 | `Program.cs` |
+| Theme | 5 | `ThemeEndpoints.cs` |
+| Content | 19 | `ContentEndpoints.cs` |
 | Filter | 1 | `ContentEndpoints.cs` |
 | Workflow & Versioning | 2 | `ContentEndpoints.cs` |
 | SEO | 6 | `SeoEndpoints.cs`, `SeoRedirectEndpoints.cs` |
-| Menu | 7 | `MenuEndpoints.cs` |
+| Menu | 8 | `MenuEndpoints.cs` |
 | Form | 6 | `FormEndpoints.cs` |
 | RBAC | 8 | `RbacEndpoints.cs` |
-| E-Commerce | 9 | `EcommerceEndpoints.cs` |
-| AI (Mock) | 2 | `AiEndpoints.cs` |
+| E-Commerce | 14 | `EcommerceEndpoints.cs` |
+| AI (Mock + Settings) | 4 | `AiEndpoints.cs` |
 | Media | 6 | `MediaEndpoints.cs` |
+| Customers CRM | 2 | `CustomerEndpoints.cs` |
+
+> Ghi chú: Content (19) đã bao gồm 1 endpoint Filter và 2 endpoint Workflow/Versioning (cùng file `ContentEndpoints.cs`); Debug (3) là các endpoint trong `Program.cs` (import-theme/generate-schema nằm ở `ThemeEndpoints.cs`).
 
 **Trạng thái: Backend Core 100% Completed (Full CRUD).**

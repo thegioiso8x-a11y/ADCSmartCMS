@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import Form from '@rjsf/antd';
 import type FormCore from '@rjsf/core';
 import validator from '@rjsf/validator-ajv8';
-import type { RJSFSchema, UiSchema, RegistryWidgetsType } from '@rjsf/utils';
-import { Button, Input, InputNumber, Switch, Select, DatePicker } from 'antd';
-import { PlusOutlined, SaveOutlined } from '@ant-design/icons';
+import type { RJSFSchema, UiSchema, RegistryWidgetsType, WidgetProps } from '@rjsf/utils';
+import { Button, Input, InputNumber, Switch, Select, DatePicker, Space, Image } from 'antd';
+import { PlusOutlined, SaveOutlined, PictureOutlined, DeleteOutlined } from '@ant-design/icons';
 import TiptapEditor from '@/components/TiptapEditor';
+import MediaPickerModal from '@/components/MediaPickerModal';
 
 /**
  * DynamicFormWrapper
@@ -39,6 +40,84 @@ const CONTROL_CLASS = 'rounded-lg';
 /** Class cho nút "Add" của trường mảng: viền nét đứt, gọn gàng. */
 const ADD_BUTTON_CLASS =
   'w-full h-9 rounded-lg border border-dashed border-indigo-300 text-indigo-600 bg-indigo-50/40 hover:bg-indigo-50 hover:border-indigo-400 font-medium';
+
+/** Base URL backend để ghép với originalUrl (đường dẫn tương đối /uploads/...). */
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5088').replace(/\/+$/, '');
+
+/** Ghép URL đầy đủ cho file media. */
+function fullUrl(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+/**
+ * MediaWidget: chọn ảnh từ thư viện Media (Modal AntD) cho field format 'media'.
+ * Hiển thị preview ảnh + nút Chọn/Xóa.
+ */
+function MediaWidget(props: WidgetProps) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const value = (props.value as string) ?? '';
+  return (
+    <div className="rounded-lg border border-slate-300 bg-white p-3">
+      <Space direction="vertical" size="small" className="w-full">
+        {value ? (
+          <div className="flex items-center gap-3">
+            <Image
+              src={fullUrl(value)}
+              alt="media"
+              width={72}
+              height={72}
+              style={{ objectFit: 'cover', borderRadius: 8 }}
+              fallback="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI3MiIgaGVpZ2h0PSI3MiI+PHJlY3Qgd2lkdGg9IjcyIiBoZWlnaHQ9IjcyIiBmaWxsPSIjZjFmNWY5Ii8+PC9zdmc+"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-slate-500 truncate font-mono" title={value}>
+                {value}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-slate-400">Chưa chọn file media</div>
+        )}
+
+        <Space>
+          <Button
+            size="small"
+            icon={<PictureOutlined />}
+            disabled={props.disabled || props.readonly}
+            onClick={() => setPickerOpen(true)}
+            className="rounded-lg"
+          >
+            {value ? 'Đổi ảnh' : 'Chọn ảnh'}
+          </Button>
+          {value ? (
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              disabled={props.disabled || props.readonly}
+              onClick={() => props.onChange(undefined)}
+              className="rounded-lg"
+            >
+              Xóa
+            </Button>
+          ) : null}
+        </Space>
+      </Space>
+
+      <MediaPickerModal
+        open={pickerOpen}
+        onCancel={() => setPickerOpen(false)}
+        mediaType="image"
+        onSelect={(url) => {
+          props.onChange(url);
+          setPickerOpen(false);
+        }}
+      />
+    </div>
+  );
+}
 
 /** Widgets tuỳ biến: bọc control Ant Design với class Tailwind để đồng bộ giao diện. */
 const widgets: RegistryWidgetsType = {
@@ -111,6 +190,8 @@ const widgets: RegistryWidgetsType = {
       placeholder={props.placeholder}
     />
   ),
+  // Media picker (Modal AntD) cho field có format 'media'.
+  MediaWidget: (props) => <MediaWidget {...props} />,
 };
 
 export default function DynamicFormWrapper({
@@ -134,6 +215,7 @@ export default function DynamicFormWrapper({
     // Duyệt schema.properties:
     //  - field type 'array' -> gắn uiSchema riêng cho nút Add.
     //  - field format 'rich_text' -> dùng RichTextWidget (Tiptap).
+    //  - field format 'media' -> dùng MediaWidget (Modal chọn ảnh).
     const props = (schema.properties ?? {}) as Record<string, { type?: string; format?: string }>;
     for (const [key, def] of Object.entries(props)) {
       if (def?.type === 'array') {
@@ -145,6 +227,8 @@ export default function DynamicFormWrapper({
         };
       } else if (def?.format === 'rich_text') {
         base[key] = { 'ui:widget': 'RichTextWidget' };
+      } else if (def?.format === 'media') {
+        base[key] = { 'ui:widget': 'MediaWidget' };
       }
     }
     return base;
@@ -189,3 +273,6 @@ export default function DynamicFormWrapper({
     </div>
   );
 }
+
+
+

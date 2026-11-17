@@ -32,6 +32,44 @@ public static class AiEndpoints
                 true));
         });
 
+        // ---------- AI Settings CRUD (chỉ super admin) ----------
+
+        // GET /api/ai/settings/{siteId}: lấy cấu hình AI (key đã mask).
+        app.MapGet("/api/ai/settings/{siteId:guid}", async (Guid siteId, HttpContext http, IAiSettingsRepository repo, CancellationToken ct) =>
+        {
+            if (!IsSuperAdmin(http)) return Results.Forbid();
+            if (siteId == Guid.Empty)
+                return Results.BadRequest(new { error = "siteId là bắt buộc." });
+
+            return Results.Ok(await repo.GetSettingsAsync(siteId, ct));
+        }).RequireAuthorization();
+
+        // PUT /api/ai/settings/{siteId}: upsert cấu hình AI.
+        app.MapPut("/api/ai/settings/{siteId:guid}", async (Guid siteId, UpdateAiSettingsRequest request, HttpContext http, IAiSettingsRepository repo, CancellationToken ct) =>
+        {
+            if (!IsSuperAdmin(http)) return Results.Forbid();
+            if (siteId == Guid.Empty)
+                return Results.BadRequest(new { error = "siteId là bắt buộc." });
+
+            try
+            {
+                return Results.Ok(await repo.UpsertSettingsAsync(siteId, request, ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Thiếu ENV ADC_AI_MASTER_KEY khi cần mã hóa key mới.
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status500InternalServerError);
+            }
+        }).RequireAuthorization();
+
         return app;
     }
+
+    /// <summary>Kiểm tra claim is_super_admin = "true" trong JWT.</summary>
+    private static bool IsSuperAdmin(HttpContext http) =>
+        string.Equals(http.User.FindFirst("is_super_admin")?.Value, "true", StringComparison.OrdinalIgnoreCase);
 }

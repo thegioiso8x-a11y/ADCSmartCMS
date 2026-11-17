@@ -545,6 +545,7 @@ export default function OrdersTab() {
       dataIndex: 'paymentMethod',
       key: 'paymentMethod',
       width: 130,
+      responsive: ['lg'],
       render: (v: string) => <span className="uppercase text-xs font-semibold text-slate-500">{v}</span>,
     },
     {
@@ -552,6 +553,7 @@ export default function OrdersTab() {
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 170,
+      responsive: ['md'],
       render: (v: string) => <span className="text-slate-600">{dayjs(v).format('DD/MM/YYYY HH:mm')}</span>,
     },
     {
@@ -696,6 +698,7 @@ export default function OrdersTab() {
           columns={orderColumns}
           dataSource={Array.isArray(orders) ? orders : []}
           loading={loading}
+          scroll={{ x: 'max-content' }}
           pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `Tổng ${t} đơn hàng` }}
           locale={{ emptyText: <Empty description="Chưa có đơn hàng nào" /> }}
         />

@@ -3,6 +3,7 @@ using AdcSmartCms.Api.Endpoints;
 using AdcSmartCms.Application.Ai;
 using AdcSmartCms.Application.Auth;
 using AdcSmartCms.Application.Content;
+using AdcSmartCms.Application.Customers;
 using AdcSmartCms.Application.Ecommerce;
 using AdcSmartCms.Application.Forms;
 using AdcSmartCms.Application.Media;
@@ -76,7 +77,9 @@ builder.Services.AddSingleton<IRbacService, RbacService>();
 builder.Services.AddSingleton<ISeoRedirectRepository, SeoRedirectRepository>();
 builder.Services.AddSingleton<IMediaRepository, MediaRepository>();
 builder.Services.AddSingleton<IEcommerceRepository, EcommerceRepository>();
+builder.Services.AddSingleton<ICustomerRepository, CustomerRepository>();
 builder.Services.AddSingleton<IAiService, MockAiService>();
+builder.Services.AddSingleton<IAiSettingsRepository, AiSettingsRepository>();
 builder.Services.AddSingleton<IAuthService, AuthService>();
 
     builder.Services.AddCors(o => o.AddPolicy("AllowAll", b => b.WithOrigins("http://localhost:3000").AllowAnyHeader().AllowAnyMethod()));
@@ -166,9 +169,11 @@ app.MapMenuEndpoints();
 app.MapFormEndpoints();
 app.MapRbacEndpoints();
 app.MapEcommerceEndpoints();
+app.MapCustomerEndpoints();
 app.MapMediaEndpoints();
 app.MapAiEndpoints();
 
 app.Run();
 
 public sealed record ParseHtmlRequest(string Html);
+

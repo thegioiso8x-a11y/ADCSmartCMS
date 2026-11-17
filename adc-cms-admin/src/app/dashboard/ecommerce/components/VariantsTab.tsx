@@ -483,6 +483,7 @@ export default function VariantsTab() {
       key: 'salePrice',
       width: 140,
       align: 'right',
+      responsive: ['lg'],
       render: (v: number) =>
         v > 0 ? (
           <span className="font-semibold text-emerald-600">{formatVnd(v)}</span>
@@ -509,6 +510,7 @@ export default function VariantsTab() {
       key: 'isActive',
       width: 120,
       align: 'center',
+      responsive: ['md'],
       render: (v: boolean) => (
         <Tag color={v ? 'green' : 'default'} className="rounded-md">
           {v ? 'Đang bán' : 'Ngừng bán'}
@@ -675,6 +677,7 @@ export default function VariantsTab() {
           columns={variantColumns}
           dataSource={variants}
           loading={variantsLoading}
+          scroll={{ x: 'max-content' }}
           pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `Tổng ${t} biến thể` }}
           locale={{
             emptyText: (
