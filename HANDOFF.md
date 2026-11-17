@@ -1,10 +1,14 @@
 # DỰ ÁN: ADC SMART & COMPOSABLE CMS - HANDOFF V7.0 (FINAL)
 
 ## PHẦN 1: QUY TẮC GIAO TIẾP TỐI ƯU TOKEN (RULES V2.0 - BẮT BUỘC TUÂN THỦ)
-(Không thay đổi so với V6.2)
+1. **KHÔNG IN CODE DÀI TRONG CHAT:** Tự động dùng tool hoặc lệnh `bash` để tạo/sửa file. Chỉ in đoạn thay đổi (tối đa 10 dòng).
+2. **ĐỊNH DẠNG BÁO CÁO CỰC NGẮN:** Phản hồi theo cấu trúc: `[TRẠNG THÁI]`, `[ĐÃ LÀM]`, `[SỐ LẦN BUILD]`, `[GHI CHÚ]`.
+3. **QUY TẮC TERMINAL:** KHÔNG TỰ CHẠY LỆNH TERMINAL. Lệnh build Backend dùng `dotnet build -v q --nologo`.
+4. **QUY TẮC AI IDE (DEEPSEEK/ANTIGRAVITY):** Luôn nhắc AI tuân thủ file `.cursorrules` (tuyệt đối không dùng `any`, dùng `MenuProps`).
 
 ## PHẦN 2: TỔNG QUAN DỰ ÁN
-(Không thay đổi so với V6.2)
+- **Mục tiêu:** Hệ thống CMS tự động hóa từ HTML/CSS tĩnh, hỗ trợ Multi-site, Dynamic Content, Faceted Filter, RBAC 4 cấp, SEO, E-commerce, AI.
+- **Kiến trúc:** Headless / Composable CMS.
 
 ## PHẦN 3: TECH STACK CỐ ĐỊNH
 - **Database:** SQL Server 2022.
