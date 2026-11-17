@@ -101,7 +101,7 @@ public sealed record CreateEntryResult(
 /// <summary>Tham số cho GET /api/entries/filter (đã chuẩn hóa từ query string).</summary>
 public sealed record FilterEntriesQuery(
     Guid SiteId,
-    string ContentTypeApiId,
+    string? ContentTypeApiId,
     string Locale,
     string? Keyword,
     string? FiltersJson,

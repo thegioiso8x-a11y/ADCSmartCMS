@@ -61,9 +61,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       label: 'Thương mại',
       children: [
         { key: '/dashboard/ecommerce', icon: <ShoppingCartOutlined />, label: 'E-commerce' },
+        { key: '/dashboard/customers', icon: <TeamOutlined />, label: 'Khách hàng' },
       ],
     },
-    { key: '/dashboard/customers', icon: <TeamOutlined />, label: 'Khách hàng' },
     {
       key: 'system-security',
       icon: <SettingOutlined />,

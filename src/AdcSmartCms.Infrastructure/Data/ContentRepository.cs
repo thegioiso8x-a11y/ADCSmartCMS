@@ -392,7 +392,11 @@ public sealed class ContentRepository : IContentRepository
         var parameters = new
         {
             site_id = query.SiteId,
-            content_type_api_id = Ansi(query.ContentTypeApiId, 100),
+            // contentTypeApiId null => truyền DBNull.Value để SP lấy toàn bộ content type của site.
+            // KHÔNG dùng Ansi() ở đây vì Ansi(null) biến thành chuỗi rỗng ('' <> NULL).
+            content_type_api_id = string.IsNullOrWhiteSpace(query.ContentTypeApiId)
+                ? (object)DBNull.Value
+                : Ansi(query.ContentTypeApiId, 100),
             locale = Ansi(query.Locale, 10),
             keyword = query.Keyword,                 // NVARCHAR(250)
             filters_json = query.FiltersJson,        // NVARCHAR(MAX)

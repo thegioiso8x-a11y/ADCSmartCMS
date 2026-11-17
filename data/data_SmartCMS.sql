@@ -833,7 +833,7 @@ BEGIN
     INNER JOIN dbo.cms_content_types ct ON e.content_type_id = ct.id
     INNER JOIN dbo.cms_entry_locales l ON l.entry_id = e.id AND l.locale = @locale
     WHERE e.site_id = @site_id
-      AND ct.api_id = @content_type_api_id
+      AND (@content_type_api_id IS NULL OR ct.api_id = @content_type_api_id)
       AND e.status = 'published'
       AND (@keyword IS NULL OR l.title LIKE N'%' + @keyword + N'%')
       AND (
@@ -884,7 +884,8 @@ BEGIN
         CASE WHEN @sort_field NOT IN ('published_at', 'title') AND @sort_dir = 'ASC'  THEN sort_idx.number_val END ASC,
         CASE WHEN @sort_field NOT IN ('published_at', 'title') AND @sort_dir = 'DESC' THEN sort_idx.number_val END DESC
     OFFSET (@page_index - 1) * @page_size ROWS
-    FETCH NEXT @page_size ROWS ONLY;
+    FETCH NEXT @page_size ROWS ONLY
+    OPTION (RECOMPILE);
 
     -- RESULT SET 2: Thống kê Facet Counts
     SELECT 

@@ -159,10 +159,10 @@ export default function EntriesPage() {
     })();
   }, [siteId]);
 
-  /** Gọi API lọc entries (phân trang). */
+  /** Gọi API lọc entries (phân trang). Luôn gọi khi mount, kể cả khi chưa chọn Content Type. */
   const loadEntries = useCallback(
     async (page = pageIndex) => {
-      if (!siteId || !selectedType) {
+      if (!siteId) {
         setEntries([]);
         setTotal(0);
         return;
@@ -172,7 +172,8 @@ export default function EntriesPage() {
         const res = await api.get<FilterEntriesResponse>('/api/entries/filter', {
           params: {
             siteId,
-            contentTypeApiId: selectedType,
+            // undefined => axios bỏ qua param trên URL => backend lấy toàn bộ content type.
+            contentTypeApiId: selectedType || undefined,
             keyword: appliedKeyword || undefined,
             pageIndex: page,
             pageSize: PAGE_SIZE,
@@ -182,8 +183,9 @@ export default function EntriesPage() {
         setEntries(items);
         // SP trả total_records trên từng dòng; lấy dòng đầu tiên.
         setTotal(items.length > 0 ? Number(items[0].totalRecords ?? items.length) : 0);
-      } catch (err: any) {
-        message.error(err?.response?.data?.error || 'Không tải được danh sách Entries');
+      } catch (err: unknown) {
+        const e = err as { response?: { data?: { error?: string } } };
+        message.error(e?.response?.data?.error || 'Không tải được danh sách Entries');
         setEntries([]);
         setTotal(0);
       } finally {
@@ -454,7 +456,11 @@ export default function EntriesPage() {
           locale={{
             emptyText: (
               <Empty
-                description={selectedType ? 'Chưa có nội dung nào' : 'Vui lòng chọn Content Type để xem dữ liệu'}
+                description={
+                  selectedType
+                    ? 'Chưa có nội dung nào cho Content Type này'
+                    : 'Chưa có nội dung nào'
+                }
               />
             ),
           }}

@@ -140,12 +140,11 @@ public static class ContentEndpoints
         {
             if (siteId is null || siteId == Guid.Empty)
                 return Results.BadRequest(new { error = "siteId là bắt buộc." });
-            if (string.IsNullOrWhiteSpace(contentTypeApiId))
-                return Results.BadRequest(new { error = "contentTypeApiId là bắt buộc." });
 
+            // contentTypeApiId là tùy chọn: null => lấy toàn bộ entry của site (mọi content type).
             var query = new FilterEntriesQuery(
                 SiteId: siteId.Value,
-                ContentTypeApiId: contentTypeApiId.Trim(),
+                ContentTypeApiId: string.IsNullOrWhiteSpace(contentTypeApiId) ? null : contentTypeApiId.Trim(),
                 Locale: string.IsNullOrWhiteSpace(locale) ? "vi" : locale.Trim(),
                 Keyword: string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim(),
                 FiltersJson: string.IsNullOrWhiteSpace(filtersJson) ? null : filtersJson,
