@@ -122,7 +122,7 @@ public static class ContentEndpoints
             return entry is null
                 ? Results.NotFound(new { error = $"Không tìm thấy entry '{entryId}' với locale '{loc}'." })
                 : Results.Ok(entry);
-        }).RequireAuthorization();
+        }).AllowAnonymous();
 
         // GET /api/entries/filter: gọi SP usp_cms_dynamic_filter_entries (bộ lọc đa chiều + facet counts).
         app.MapGet("/api/entries/filter", async (
@@ -155,7 +155,7 @@ public static class ContentEndpoints
 
             var result = await repo.FilterEntriesAsync(query, ct);
             return Results.Ok(new { items = result.Items, facets = result.Facets });
-        });
+        }).AllowAnonymous();
 
         // PUT /api/entries/{entryId}/status: đổi trạng thái workflow; published -> set published_at.
         app.MapPut("/api/entries/{entryId:guid}/status", async (Guid entryId, UpdateStatusRequest request, IContentRepository repo, CancellationToken ct) =>
@@ -208,11 +208,12 @@ public static class ContentEndpoints
         // ---------- Page Builder: cms_entry_blocks ----------
 
         // GET /api/entries/{entryId}/blocks?locale=vi: danh sách khối của entry theo locale (sort_order ASC).
+        // AllowAnonymous: Public Website cần đọc blocks để render Page Builder.
         app.MapGet("/api/entries/{entryId:guid}/blocks", async (Guid entryId, string? locale, IContentRepository repo, CancellationToken ct) =>
         {
             var loc = string.IsNullOrWhiteSpace(locale) ? "vi" : locale.Trim();
             return Results.Ok(await repo.GetBlocksAsync(entryId, loc, ct));
-        }).RequireAuthorization();
+        }).AllowAnonymous();
 
         // POST /api/entries/{entryId}/blocks: tạo khối mới cho entry.
         app.MapPost("/api/entries/{entryId:guid}/blocks", async (Guid entryId, CreateBlockRequest request, IContentRepository repo, CancellationToken ct) =>

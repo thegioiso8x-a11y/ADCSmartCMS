@@ -91,8 +91,9 @@ public static class ThemeEndpoints
         });
 
         // GET /api/themes: danh sách theme (mới nhất trước).
+        // AllowAnonymous: Public Website cần đọc theme đang kích hoạt để render giao diện.
         app.MapGet("/api/themes", async (IThemeRepository repo, CancellationToken ct) =>
-            Results.Ok(await repo.GetThemesAsync(ct))).RequireAuthorization();
+            Results.Ok(await repo.GetThemesAsync(ct))).AllowAnonymous();
 
         // PUT /api/themes/{id}/variables: cập nhật chuỗi JSON theme_variables.
         app.MapPut("/api/themes/{id:guid}/variables", async (
@@ -114,11 +115,12 @@ public static class ThemeEndpoints
         }).RequireAuthorization();
 
         // GET /api/themes/{themeId}/templates: danh sách template (Liquid HTML + extracted_schema) của theme.
+        // AllowAnonymous: Public Website cần đọc template để render giao diện.
         app.MapGet("/api/themes/{themeId:guid}/templates", async (
             Guid themeId,
             IThemeRepository repo,
             CancellationToken ct) =>
-            Results.Ok(await repo.GetTemplatesAsync(themeId, ct))).RequireAuthorization();
+            Results.Ok(await repo.GetTemplatesAsync(themeId, ct))).AllowAnonymous();
 
         return app;
     }

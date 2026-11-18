@@ -22,7 +22,7 @@ public static class MenuEndpoints
             var flat = await repo.GetMenuItemsAsync(menu.Id, ct);
             var tree = BuildTree(flat);
             return Results.Ok(new MenuTreeResult(menu, tree));
-        }).RequireAuthorization();
+        }).AllowAnonymous();
 
         // GET /api/menus/list?siteId=...: danh sách tất cả menu của site (mới nhất trước).
         app.MapGet("/api/menus/list", async (Guid? siteId, IMenuRepository repo, CancellationToken ct) =>
@@ -31,7 +31,7 @@ public static class MenuEndpoints
                 return Results.BadRequest(new { error = "siteId là bắt buộc." });
 
             return Results.Ok(await repo.GetMenusBySiteAsync(siteId.Value, ct));
-        }).RequireAuthorization();
+        }).AllowAnonymous();
 
         // POST /api/menus: tạo menu mới (code, name).
         app.MapPost("/api/menus", async (CreateMenuRequest request, IMenuRepository repo, CancellationToken ct) =>
