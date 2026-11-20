@@ -1,0 +1,12 @@
+inpro-theme/
+├── index.html                  (Trang chủ - Chứa Master Layout & 6 Blocks)
+├── page-gioi-thieu.html        (Trang đơn tĩnh - Đổi tên từ about.html)
+├── page-lien-he.html           (Trang đơn tĩnh - Đổi tên từ contact.html)
+├── list-service.html           (Trang danh sách/tổng quan Dịch vụ - Đổi từ list-services.html)
+├── detail-service.html         (Trang chi tiết Dịch vụ - Đổi từ detail-services.html)
+├── list-news.html              (Trang danh sách Tin tức có phân trang)
+├── detail-news.html            (Trang chi tiết Bài viết Tin tức)
+└── assets/
+    ├── css/
+    │   └── style.css           (Đã sửa toàn bộ url('../images/...') và gắn nhãn biến :root)
+    └── images/                 (Thư mục chứa ảnh tĩnh ban đầu để CMS tự động Seed vào DAM)

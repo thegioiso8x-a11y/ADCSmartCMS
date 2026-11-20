@@ -70,6 +70,7 @@ builder.Services.AddSingleton<IThemeLinter, ZipThemeLinter>();
 builder.Services.AddSingleton<IThemeRepository, ThemeRepository>();
 builder.Services.AddSingleton<IThemeImporter, ThemeImporter>();
 builder.Services.AddSingleton<IAutoSchemaGenerator, AutoSchemaGenerator>();
+builder.Services.AddSingleton<IThemeMenuSeeder, ThemeMenuSeeder>();
 builder.Services.AddSingleton<IContentRepository, ContentRepository>();
 builder.Services.AddSingleton<IMenuRepository, MenuRepository>();
 builder.Services.AddSingleton<IFormRepository, FormRepository>();

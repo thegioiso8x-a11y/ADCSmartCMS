@@ -781,7 +781,7 @@ GO
 ============================================================================ */
 CREATE OR ALTER PROCEDURE dbo.usp_cms_dynamic_filter_entries
     @site_id UNIQUEIDENTIFIER,
-    @content_type_api_id VARCHAR(100),
+    @content_type_api_id VARCHAR(100) = NULL,
     @locale VARCHAR(10) = 'vi',
     @keyword NVARCHAR(250) = NULL,
     @filters_json NVARCHAR(MAX) = NULL,

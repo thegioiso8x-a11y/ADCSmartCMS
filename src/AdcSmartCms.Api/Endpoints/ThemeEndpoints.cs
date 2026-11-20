@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using AdcSmartCms.Application.Themes;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,7 +10,7 @@ public static class ThemeEndpoints
     {
         // DEBUG: multipart. Trường: file (bắt buộc), assetsBaseUrl (bắt buộc), themeCode, themeName, version (tùy chọn).
         // themeCode mặc định = slug của tên file zip; themeName mặc định = tên file zip (bỏ đuôi); version mặc định "1.0.0"
-        // (giá trị DEFAULT của cột version). assetsBaseUrl KHÔNG có mặc định vì tài liệu chưa quy định nơi phục vụ asset.
+        // (giá trị DEFAULT của cột version). Tự động chuẩn hóa assetsBaseUrl (khử lặp /assets) và giải nén file tĩnh ra wwwroot/themes/{themeCode}.
         app.MapPost("/api/debug/import-theme", async (
             IFormFile? file,
             [FromForm] string? assetsBaseUrl,
@@ -17,17 +18,26 @@ public static class ThemeEndpoints
             [FromForm] string? themeName,
             [FromForm] string? version,
             IThemeImporter importer,
+            IWebHostEnvironment env,
             CancellationToken ct) =>
         {
             if (file is null || file.Length == 0)
                 return Results.BadRequest(new { error = "Thiếu tệp .zip (multipart field 'file')." });
 
             var baseName = Path.GetFileNameWithoutExtension(file.FileName);
+            var resolvedThemeCode = string.IsNullOrWhiteSpace(themeCode) ? ThemeNaming.Slugify(baseName) : themeCode.Trim();
+
+            var cleanAssetsBaseUrl = assetsBaseUrl?.Trim().TrimEnd('/') ?? string.Empty;
+            if (cleanAssetsBaseUrl.EndsWith("/assets", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanAssetsBaseUrl = cleanAssetsBaseUrl[..^7];
+            }
+
             var request = new ThemeImportRequest(
-                ThemeCode: string.IsNullOrWhiteSpace(themeCode) ? ThemeNaming.Slugify(baseName) : themeCode.Trim(),
+                ThemeCode: resolvedThemeCode,
                 ThemeName: string.IsNullOrWhiteSpace(themeName) ? baseName : themeName.Trim(),
                 Version: string.IsNullOrWhiteSpace(version) ? "1.0.0" : version.Trim(),
-                AssetsBaseUrl: assetsBaseUrl?.Trim() ?? string.Empty);
+                AssetsBaseUrl: cleanAssetsBaseUrl);
 
             var requestErrors = request.Validate();
             if (requestErrors.Count > 0)
@@ -35,6 +45,56 @@ public static class ThemeEndpoints
 
             await using var stream = file.OpenReadStream();
             var result = await importer.ImportAsync(stream, request, ct);
+
+            if (result.Status is not ThemeImportStatus.LintFailed and not ThemeImportStatus.DuplicateThemeCode)
+            {
+                var webRoot = string.IsNullOrWhiteSpace(env.WebRootPath)
+                    ? Path.Combine(env.ContentRootPath, "wwwroot")
+                    : env.WebRootPath;
+
+                var themeDir = Path.GetFullPath(Path.Combine(webRoot, "themes", request.ThemeCode));
+                Directory.CreateDirectory(themeDir);
+
+                var rootPrefix = string.IsNullOrWhiteSpace(result.Lint.RootFolder)
+                    ? string.Empty
+                    : result.Lint.RootFolder.Replace('\\', '/').Trim('/') + "/";
+
+                await using var zipStream = file.OpenReadStream();
+                using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+
+                foreach (var entry in archive.Entries)
+                {
+                    if (string.IsNullOrEmpty(entry.Name))
+                        continue;
+
+                    if (entry.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var normalizedEntryPath = entry.FullName.Replace('\\', '/').TrimStart('/');
+                    if (rootPrefix.Length > 0 && normalizedEntryPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        normalizedEntryPath = normalizedEntryPath[rootPrefix.Length..];
+                    }
+
+                    if (string.IsNullOrWhiteSpace(normalizedEntryPath))
+                        continue;
+
+                    var destPath = Path.GetFullPath(Path.Combine(themeDir, normalizedEntryPath));
+                    if (!destPath.StartsWith(themeDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(destPath, themeDir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var destDir = Path.GetDirectoryName(destPath);
+                    if (!string.IsNullOrEmpty(destDir))
+                    {
+                        Directory.CreateDirectory(destDir);
+                    }
+
+                    entry.ExtractToFile(destPath, overwrite: true);
+                }
+            }
 
             return result.Status switch
             {
@@ -67,10 +127,13 @@ public static class ThemeEndpoints
         }).DisableAntiforgery();
 
         // DEBUG (Bước 1.5): đọc extracted_schema của theme, sinh INSERT vào cms_content_types + cms_field_definitions.
-        // Idempotent: chạy lại không nhân bản (bỏ qua content type/field đã tồn tại).
+        // Đồng thời bóc tách menu (<ul data-cms-menu>) từ layout_master để upsert vào cms_menus + cms_menu_items.
+        // Idempotent: chạy lại không nhân bản (bỏ qua content type/field/menu/item đã tồn tại).
         app.MapPost("/api/debug/generate-schema/{themeId:guid}", async (
             Guid themeId,
+            Guid? siteId,
             IAutoSchemaGenerator generator,
+            IThemeMenuSeeder menuSeeder,
             CancellationToken ct) =>
         {
             var model = await generator.GenerateAsync(themeId, ct);
@@ -79,14 +142,22 @@ public static class ThemeEndpoints
 
             var persisted = await generator.PersistAsync(themeId, ct);
 
+            // Seed menu từ HTML của layout_master cho site (mặc định site tech_store).
+            var resolvedSiteId = siteId is { } s && s != Guid.Empty
+                ? s
+                : Guid.Parse("2FD0078F-0043-4083-B34F-4BDF7BF6A604");
+            var menuSeed = await menuSeeder.SeedFromThemeAsync(themeId, resolvedSiteId, ct);
+
             return Results.Ok(new
             {
                 status = "Generated",
                 themeId,
+                siteId = resolvedSiteId,
                 templatesRead = model.TemplatesRead,
                 contentTypes = model.ContentTypes,
                 warnings = model.Warnings,
-                persisted
+                persisted,
+                menuSeed
             });
         });
 
@@ -125,3 +196,4 @@ public static class ThemeEndpoints
         return app;
     }
 }
+

@@ -6,19 +6,8 @@
  *
  * 1) Đường dẫn tĩnh: `assets/...` -> `${assetsBaseUrl}/assets/...`
  *    (áp dụng cho href=", src=", url(' trong CSS inline).
- * 2) Link .html -> route Next.js tương ứng.
+ * 2) Link .html -> route Next.js tương ứng (TỔNG QUÁT, không hardcode tên trang).
  */
-
-/** Map tên file .html -> route public. */
-const HTML_ROUTE_MAP: Record<string, string> = {
-  'index.html': '/',
-  'list-news.html': '/tin-tuc',
-  'list-service.html': '/dich-vu',
-  'page-gioi-thieu.html': '/gioi-thieu',
-  'page-lien-he.html': '/lien-he',
-  'detail-news.html': '/tin-tuc/chi-tiet',
-  'detail-service.html': '/dich-vu/chi-tiet',
-};
 
 /** Chuẩn hóa base URL: bỏ dấu '/' ở cuối. */
 function normalizeBase(assetsBaseUrl: string): string {
@@ -28,6 +17,55 @@ function normalizeBase(assetsBaseUrl: string): string {
 /** Escape ký tự đặc biệt trong RegExp. */
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Chuyển 1 href nội bộ (.html) thành route public tổng quát.
+ * Quy tắc (không hardcode tên trang):
+ *  - index.html            -> /
+ *  - page-<slug>.html      -> /<slug>
+ *  - list-<slug>.html      -> /<slug>
+ *  - detail-<slug>.html    -> /<slug>
+ *  - <slug>.html           -> /<slug>
+ *  - <slug> (không .html)  -> giữ nguyên
+ */
+function rewriteInternalHref(href: string, routePrefix: string): string {
+    const trimmed = href.trim();
+
+  // Bỏ qua URL tuyệt đối / anchor / mailto / tel / javascript.
+  if (
+    /^(https?:)?\/\//i.test(trimmed) ||
+    trimmed.startsWith('#') ||
+    /^(mailto|tel|javascript):/i.test(trimmed)
+  ) {
+    return href;
+    }
+
+  // Tách query/hash để giữ lại sau khi rewrite.
+    const [pathPart, ...restParts] = trimmed.split(/(?=[?#])/);
+    const suffix = restParts.join('');
+
+  // Chỉ xử lý link .html (hoặc index).
+  if (!/\.html?$/i.test(pathPart)) return href;
+  const fileName = (pathPart.split('/').pop() ?? '').replace(/\.html?$/i, '');
+
+  // index.html -> trang chủ.
+  if (fileName.toLowerCase() === 'index') {
+    return `${routePrefix}/${suffix}`;
+    }
+
+  // page-<slug> / list-<slug> / detail-<slug> -> /<slug>.
+  const prefixed = fileName.match(/^(?:page|list|detail)-([a-zA-Z0-9_-]+)$/i);
+  if (prefixed) {
+    return `${routePrefix}/${prefixed[1]}${suffix}`;
+  }
+
+  // Các file .html nội bộ khác -> /<slug>.
+  if (fileName.length > 0) {
+    return `${routePrefix}/${fileName}${suffix}`;
+  }
+
+  return `${routePrefix}/${suffix}`;
 }
 
 /**
@@ -60,37 +98,16 @@ export function transformHtml(html: string, assetsBaseUrl: string, routePrefix =
     });
   }
 
-  // ---------- 2) Link .html -> route ----------
+  // ---------- 2) Link .html -> route (tổng quát) ----------
   // Chỉ xử lý trong thuộc tính href của thẻ <a>.
-  out = out.replace(/<a\b([^>]*?)\bhref=(["'])([^"']+)\2([^>]*)>/gi, (match, before: string, quote: string, href: string, after: string) => {
-    const trimmed = href.trim();
-
-    // Bỏ qua URL tuyệt đối / anchor / mailto / tel.
-    if (/^(https?:)?\/\//i.test(trimmed) || trimmed.startsWith('#') || /^(mailto|tel|javascript):/i.test(trimmed)) {
-      return match;
-    }
-
-    // Lấy phần path (bỏ query/hash) để tra map.
-    const [pathPart, ...restParts] = trimmed.split(/(?=[?#])/);
-    const suffix = restParts.join('');
-    const fileName = pathPart.split('/').pop() ?? '';
-
-    const mapped = HTML_ROUTE_MAP[fileName];
-    if (mapped) {
-      const target = `${routePrefix}${mapped}${suffix}`;
+  out = out.replace(
+    /<a\b([^>]*?)\bhref=(["'])([^"']+)\2([^>]*)>/gi,
+    (match, before: string, quote: string, href: string, after: string) => {
+      const target = rewriteInternalHref(href, routePrefix);
+      if (target === href) return match;
       return `<a${before}href=${quote}${target}${quote}${after}>`;
     }
-
-    // Các file .html khác: bỏ đuôi .html và chuyển thành route tương đối.
-    if (/\.html?$/i.test(pathPart)) {
-      const withoutExt = pathPart.replace(/\.html?$/i, '');
-      const slug = withoutExt.split('/').pop() ?? '';
-      const target = slug && slug !== 'index' ? `${routePrefix}/${slug}${suffix}` : `${routePrefix}/${suffix}`;
-      return `<a${before}href=${quote}${target}${quote}${after}>`;
-    }
-
-    return match;
-  });
+  );
 
   // ---------- 3) Dọn dẹp: bỏ thẻ <base> nếu template có (gây lệch đường dẫn) ----------
   out = out.replace(/<base\b[^>]*>/gi, '');
@@ -103,3 +120,4 @@ export function transformHtml(html: string, assetsBaseUrl: string, routePrefix =
 
   return out;
 }
+

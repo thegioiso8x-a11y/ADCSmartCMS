@@ -389,19 +389,19 @@ public sealed class ContentRepository : IContentRepository
         using var conn = _factory.CreateConnection();
         if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
 
+        // Anonymous object với kiểu nguyên thủy (string?/Guid/int) — Dapper tự map null -> DBNull.Value.
+        // TUYỆT ĐỐI KHÔNG dùng DbString/DynamicParameters cho tham số Stored Procedure:
+        // Dapper không có type handler cho DbString khi truyền vào SP => "No mapping exists from object type Dapper.DbString".
         var parameters = new
         {
             site_id = query.SiteId,
-            // contentTypeApiId null => truyền DBNull.Value để SP lấy toàn bộ content type của site.
-            // KHÔNG dùng Ansi() ở đây vì Ansi(null) biến thành chuỗi rỗng ('' <> NULL).
-            content_type_api_id = string.IsNullOrWhiteSpace(query.ContentTypeApiId)
-                ? (object)DBNull.Value
-                : Ansi(query.ContentTypeApiId, 100),
-            locale = Ansi(query.Locale, 10),
+            // contentTypeApiId null/rỗng => null => Dapper map sang DBNull.Value => SP lấy toàn bộ content type.
+            content_type_api_id = string.IsNullOrWhiteSpace(query.ContentTypeApiId) ? null : query.ContentTypeApiId,
+            locale = query.Locale,
             keyword = query.Keyword,                 // NVARCHAR(250)
             filters_json = query.FiltersJson,        // NVARCHAR(MAX)
-            sort_field = Ansi(query.SortField, 100),
-            sort_dir = Ansi(query.SortDir, 4),
+            sort_field = query.SortField,
+            sort_dir = query.SortDir,
             page_index = query.PageIndex,
             page_size = query.PageSize
         };
