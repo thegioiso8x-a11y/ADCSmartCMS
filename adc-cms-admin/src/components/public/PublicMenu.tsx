@@ -23,7 +23,11 @@ function resolveLabel(item: MenuItemNode, locale = 'vi'): string {
 }
 
 function MenuList({ items, locale, level }: { items: MenuItemNode[]; locale: string; level: number }) {
-  const visible = items.filter((i) => i.isVisible);
+  // Sắp xếp theo sortOrder tăng dần (áp dụng cho cả cấp 1 và đệ quy menu con).
+  const visible = items
+    .filter((i) => i.isVisible)
+    .slice()
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   if (visible.length === 0) return null;
 
   return (

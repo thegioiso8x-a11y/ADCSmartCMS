@@ -161,10 +161,11 @@ public static class ThemeEndpoints
             });
         });
 
-        // GET /api/themes: danh sách theme (mới nhất trước).
+        // GET /api/themes?siteId=...: danh sách theme (mới nhất trước).
+        // siteId != null => đánh dấu IsActive cho theme đang dùng của site đó.
         // AllowAnonymous: Public Website cần đọc theme đang kích hoạt để render giao diện.
-        app.MapGet("/api/themes", async (IThemeRepository repo, CancellationToken ct) =>
-            Results.Ok(await repo.GetThemesAsync(ct))).AllowAnonymous();
+        app.MapGet("/api/themes", async (Guid? siteId, IThemeRepository repo, CancellationToken ct) =>
+            Results.Ok(await repo.GetThemesAsync(siteId, ct))).AllowAnonymous();
 
         // PUT /api/themes/{id}/variables: cập nhật chuỗi JSON theme_variables.
         app.MapPut("/api/themes/{id:guid}/variables", async (
@@ -192,6 +193,51 @@ public static class ThemeEndpoints
             IThemeRepository repo,
             CancellationToken ct) =>
             Results.Ok(await repo.GetTemplatesAsync(themeId, ct))).AllowAnonymous();
+
+        // DELETE /api/themes/{id}: xóa theme (cascade xóa templates) + xóa thư mục file vật lý.
+        // Chặn xóa nếu theme đang là active_theme_id của bất kỳ site nào (409 Conflict).
+        app.MapDelete("/api/themes/{id:guid}", async (
+            Guid id,
+            IThemeRepository repo,
+            IWebHostEnvironment env,
+            CancellationToken ct) =>
+        {
+            var result = await repo.DeleteAsync(id, ct);
+            switch (result.Status)
+            {
+                case ThemeDeleteStatus.NotFound:
+                    return Results.NotFound(new { error = $"Không tìm thấy theme '{id}'." });
+
+                case ThemeDeleteStatus.InUse:
+                    return Results.Conflict(new
+                    {
+                        error = $"Không thể xóa theme '{id}' vì đang được {result.SitesUsing} site sử dụng làm giao diện active.",
+                        sitesUsing = result.SitesUsing
+                    });
+
+                default:
+                    // Bước 3: Xóa thư mục file vật lý wwwroot/themes/{theme_code} (bọc try/catch).
+                    if (!string.IsNullOrWhiteSpace(result.ThemeCode))
+                    {
+                        try
+                        {
+                            var webRoot = string.IsNullOrWhiteSpace(env.WebRootPath)
+                                ? Path.Combine(env.ContentRootPath, "wwwroot")
+                                : env.WebRootPath;
+                            var themeDir = Path.GetFullPath(Path.Combine(webRoot, "themes", result.ThemeCode));
+                            if (Directory.Exists(themeDir))
+                            {
+                                Directory.Delete(themeDir, recursive: true);
+                            }
+                        }
+                        catch
+                        {
+                            // Không chặn phản hồi nếu xóa file thất bại (DB đã xóa thành công).
+                        }
+                    }
+                    return Results.Ok(new { id, status = "deleted" });
+            }
+        }).RequireAuthorization();
 
         return app;
     }

@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AdcSmartCms.Application.Themes;
 using Dapper;
 using HtmlAgilityPack;
@@ -25,7 +26,9 @@ public sealed class ThemeMenuSeeder : IThemeMenuSeeder
 
     private const string ThemeExistsSql = "SELECT COUNT(1) FROM dbo.cms_themes WHERE id = @ThemeId;";
 
-    private const string MenuExistsSql = "SELECT id FROM dbo.cms_menus WHERE site_id = @SiteId AND menu_code = @MenuCode;";
+    // Dọn dẹp menu cũ của site trước khi seed lại (tránh trùng lặp khi chạy nhiều lần).
+    // cms_menu_items có FK ON DELETE CASCADE tới cms_menus => xóa menu tự xóa items.
+    private const string DeleteMenusSql = "DELETE FROM dbo.cms_menus WHERE site_id = @SiteId;";
 
     private const string InsertMenuSql = """
         INSERT INTO dbo.cms_menus (site_id, menu_code, menu_name, is_active)
@@ -90,7 +93,7 @@ public sealed class ThemeMenuSeeder : IThemeMenuSeeder
         if (title.Length == 0) return null;
 
         var href = anchor?.GetAttributeValue("href", string.Empty)?.Trim();
-        var url = string.IsNullOrWhiteSpace(href) ? null : href;
+        var (url, linkType) = MapLink(href);
 
         var children = new List<SeededMenuItem>();
         var subUl = li.SelectSingleNode("./ul");
@@ -103,7 +106,73 @@ public sealed class ThemeMenuSeeder : IThemeMenuSeeder
             }
         }
 
-        return new SeededMenuItem(title, url, children);
+        return new SeededMenuItem(title, url, linkType, children);
+    }
+
+    /// <summary>
+    /// Map link tĩnh trong HTML theme -> (custom_url, link_type) cho Menu động.
+    /// Quy tắc (không hardcode theo 1 theme cụ thể, dựa trên quy ước tên file):
+    ///  - index.html            -> "/"            (custom)
+    ///  - list-&lt;slug&gt;.html    -> "/&lt;slug&gt;"      (collection)
+    ///  - detail-&lt;slug&gt;.html  -> "/&lt;slug&gt;/chi-tiet" (custom)
+    ///  - page-&lt;slug&gt;.html    -> "/&lt;slug&gt;"      (custom)
+    ///  - &lt;slug&gt;.html         -> "/&lt;slug&gt;"      (custom)
+    ///  - http/https/#/mailto/tel -> giữ nguyên href (custom)
+    ///  - rỗng                  -> null (custom)
+    /// </summary>
+    private static (string? Url, string LinkType) MapLink(string? href)
+    {
+        if (string.IsNullOrWhiteSpace(href)) return (null, "custom");
+
+        var trimmed = href.Trim();
+
+        // Link ngoài / anchor / mailto / tel / javascript -> giữ nguyên.
+        if (
+            Regex.IsMatch(trimmed, @"^(https?:)?//", RegexOptions.IgnoreCase) ||
+            trimmed.StartsWith('#') ||
+            Regex.IsMatch(trimmed, @"^(mailto|tel|javascript):", RegexOptions.IgnoreCase))
+        {
+            return (trimmed, "custom");
+        }
+
+        // Tách query/hash để giữ lại sau khi map.
+        var hashIndex = trimmed.IndexOfAny(new[] { '?', '#' });
+        var pathPart = hashIndex >= 0 ? trimmed[..hashIndex] : trimmed;
+        var suffix = hashIndex >= 0 ? trimmed[hashIndex..] : string.Empty;
+
+        // Chỉ map file .html; link nội bộ khác giữ nguyên.
+        if (!pathPart.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            return (trimmed, "custom");
+
+        var fileName = pathPart.Split('/').Last().Replace(".html", string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        // index.html -> trang chủ.
+        if (fileName.Equals("index", StringComparison.OrdinalIgnoreCase))
+            return ($"/{suffix}", "custom");
+
+        // list-<slug>.html -> /<slug> (collection).
+        if (fileName.StartsWith("list-", StringComparison.OrdinalIgnoreCase))
+        {
+            var slug = fileName["list-".Length..];
+            return ($"/{slug}{suffix}", "collection");
+        }
+
+        // detail-<slug>.html -> /<slug>/chi-tiet (custom).
+        if (fileName.StartsWith("detail-", StringComparison.OrdinalIgnoreCase))
+        {
+            var slug = fileName["detail-".Length..];
+            return ($"/{slug}/chi-tiet{suffix}", "custom");
+        }
+
+        // page-<slug>.html -> /<slug> (custom).
+        if (fileName.StartsWith("page-", StringComparison.OrdinalIgnoreCase))
+        {
+            var slug = fileName["page-".Length..];
+            return ($"/{slug}{suffix}", "custom");
+        }
+
+        // <slug>.html -> /<slug> (custom).
+        return ($"/{fileName}{suffix}", "custom");
     }
 
     // ---------- Persist ----------
@@ -132,29 +201,23 @@ public sealed class ThemeMenuSeeder : IThemeMenuSeeder
         using var tx = conn.BeginTransaction();
         try
         {
+            // Phần 1: Dọn dẹp menu cũ của site (tránh trùng lặp khi chạy lại nhiều lần).
+            // Xóa toàn bộ menu của site; cms_menu_items xóa theo CASCADE.
+            await conn.ExecuteAsync(new CommandDefinition(
+                DeleteMenusSql, new { SiteId = siteId }, tx, cancellationToken: ct));
+
             foreach (var menu in menus)
             {
                 codes.Add(menu.MenuCode);
 
-                var existingMenuId = await conn.ExecuteScalarAsync<Guid?>(new CommandDefinition(
-                    MenuExistsSql, new { SiteId = siteId, MenuCode = menu.MenuCode }, tx, cancellationToken: ct));
-
-                Guid menuId;
-                if (existingMenuId is { } mid)
+                // Sau khi dọn dẹp, menu luôn được tạo mới.
+                var menuId = await conn.ExecuteScalarAsync<Guid>(new CommandDefinition(InsertMenuSql, new
                 {
-                    menuId = mid;
-                    menusSkipped++;
-                }
-                else
-                {
-                    menuId = await conn.ExecuteScalarAsync<Guid>(new CommandDefinition(InsertMenuSql, new
-                    {
-                        SiteId = siteId,
-                        MenuCode = menu.MenuCode,
-                        MenuName = DisplayNameOf(menu.MenuCode)
-                    }, tx, cancellationToken: ct));
-                    menusCreated++;
-                }
+                    SiteId = siteId,
+                    MenuCode = menu.MenuCode,
+                    MenuName = DisplayNameOf(menu.MenuCode)
+                }, tx, cancellationToken: ct));
+                menusCreated++;
 
                 // Upsert đệ quy các mục menu.
                 await UpsertItemsAsync(conn, tx, menuId, menu.Items, parentId: null, parentPath: "/", ct,
@@ -189,7 +252,7 @@ public sealed class ThemeMenuSeeder : IThemeMenuSeeder
             sortOrder++;
 
             var titleLocales = JsonSerializer.Serialize(new Dictionary<string, string> { ["vi"] = item.Title });
-            var linkType = string.IsNullOrWhiteSpace(item.Url) ? "custom" : "custom";
+            var linkType = string.IsNullOrWhiteSpace(item.LinkType) ? "custom" : item.LinkType;
 
             var exists = await conn.ExecuteScalarAsync<int>(new CommandDefinition(ItemExistsSql, new
             {

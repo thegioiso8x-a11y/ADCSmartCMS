@@ -7,6 +7,7 @@ import { injectThemeMenus } from '@/lib/themeMenu';
 import { resolveTemplateKey, composeWithLayout } from '@/lib/themeRouting';
 import {
   loadActiveTheme,
+  getAvailableTemplates,
   loadMenu,
   loadEntries,
   loadEntryBlocks,
@@ -77,10 +78,23 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function PublicPage({ params }: PageProps) {
   const { slug = [] } = await params;
   // 1) Theme + templates + menu (song song để giảm thời gian chờ).
-  const [{ theme, templates }, menu] = await Promise.all([loadActiveTheme(), loadMenu('primary_menu')]);
+  //    getAvailableTemplates: danh sách templateKey của theme đang active (dùng cho auto-matching route).
+  const [{ theme, templates }, availableTemplateKeys, menu] = await Promise.all([
+    loadActiveTheme(),
+    getAvailableTemplates(),
+    loadMenu('primary_menu'),
+  ]);
 
-  const templateKey = resolveTemplateKey(slug, templates);
-  const template = pickTemplate(templates, templateKey);
+  // Chỉ giữ template thuộc theme đang active (nếu có danh sách) để auto-matching không lẫn theme khác.
+  const activeTemplates: Record<string, ThemeTemplate> =
+    availableTemplateKeys.length > 0
+      ? Object.fromEntries(
+          Object.entries(templates).filter(([key]) => availableTemplateKeys.includes(key))
+        )
+      : templates;
+
+  const templateKey = resolveTemplateKey(slug, activeTemplates);
+  const template = pickTemplate(activeTemplates, templateKey);
   const assetsBaseUrl = theme?.assetsBaseUrl ?? '';
 
   const isHome = slug.length === 0;
@@ -165,7 +179,7 @@ export default async function PublicPage({ params }: PageProps) {
   let rawHtml = template ? await renderLiquid(template.compiledHtml, liquidData) : '';
 
   // 5) Trang con: ghép ruột <main> của template con vào layout_master (giữ head/CSS/header/footer).
-  const layout = templates['layout_master'];
+  const layout = activeTemplates['layout_master'];
   if (template && layout && template.templateKey !== 'layout_master' && !isHome) {
     const layoutHtml = await renderLiquid(layout.compiledHtml, liquidData);
     rawHtml = composeWithLayout(layoutHtml, rawHtml);

@@ -26,6 +26,9 @@ public sealed class ThemeListItemDto
     public string? ThumbnailUrl { get; set; }
     public string ThemeVariables { get; set; } = "{}";   // JSON string (raw)
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>True nếu theme đang là active_theme_id của site được truyền vào (siteId).</summary>
+    public bool IsActive { get; set; }
 }
 
 /// <summary>Body của PUT /api/themes/{id}/variables.</summary>
@@ -50,15 +53,34 @@ public interface IThemeRepository
     /// </summary>
     Task<ThemeCreated?> CreateAsync(ThemeInsert theme, IReadOnlyList<ThemeTemplateInsert> templates, CancellationToken ct);
 
-    /// <summary>Danh sách theme (mới nhất trước).</summary>
-    Task<IReadOnlyList<ThemeListItemDto>> GetThemesAsync(CancellationToken ct);
+    /// <summary>Danh sách theme (mới nhất trước). siteId != null => đánh dấu IsActive cho theme đang dùng của site đó.</summary>
+    Task<IReadOnlyList<ThemeListItemDto>> GetThemesAsync(Guid? siteId, CancellationToken ct);
 
     /// <summary>Cập nhật theme_variables (JSON object). Trả null nếu theme không tồn tại.</summary>
     Task<ThemeListItemDto?> UpdateThemeVariablesAsync(Guid themeId, string themeVariablesJson, CancellationToken ct);
 
     /// <summary>Danh sách template của 1 theme (sắp theo template_key).</summary>
     Task<IReadOnlyList<ThemeTemplateDto>> GetTemplatesAsync(Guid themeId, CancellationToken ct);
+
+    /// <summary>
+    /// Xóa theme (cascade xóa cms_theme_templates). Trả về kết quả:
+    ///  - NotFound: theme không tồn tại.
+    ///  - InUse: theme đang là active_theme_id của ít nhất 1 site (chặn xóa).
+    ///  - Deleted: xóa thành công.
+    /// </summary>
+    Task<ThemeDeleteResult> DeleteAsync(Guid themeId, CancellationToken ct);
 }
+
+/// <summary>Kết quả xóa theme.</summary>
+public enum ThemeDeleteStatus
+{
+    Deleted,
+    NotFound,
+    InUse
+}
+
+/// <summary>Kết quả xóa theme (kèm số site đang dùng nếu bị chặn + theme_code để xóa file vật lý).</summary>
+public sealed record ThemeDeleteResult(ThemeDeleteStatus Status, int SitesUsing, string? ThemeCode = null);
 
 // ---------- Import use-case ----------
 

@@ -26,12 +26,15 @@ public sealed class ThemeRepository : IThemeRepository
         VALUES (@ThemeId, @TemplateKey, @TemplateType, @CompiledHtml, @ExtractedSchema);
         """;
 
+    // siteId != null => LEFT JOIN cms_sites để đánh dấu IsActive cho theme đang dùng của site đó.
     private const string SelectThemesSql = """
-        SELECT id AS Id, theme_code AS ThemeCode, theme_name AS ThemeName, version AS Version,
-               assets_base_url AS AssetsBaseUrl, thumbnail_url AS ThumbnailUrl,
-               theme_variables AS ThemeVariables, created_at AS CreatedAt
-        FROM dbo.cms_themes
-        ORDER BY created_at DESC;
+        SELECT t.id AS Id, t.theme_code AS ThemeCode, t.theme_name AS ThemeName, t.version AS Version,
+               t.assets_base_url AS AssetsBaseUrl, t.thumbnail_url AS ThumbnailUrl,
+               t.theme_variables AS ThemeVariables, t.created_at AS CreatedAt,
+               CASE WHEN @SiteId IS NOT NULL AND t.id = s.active_theme_id THEN 1 ELSE 0 END AS IsActive
+        FROM dbo.cms_themes t
+        LEFT JOIN dbo.cms_sites s ON s.id = @SiteId
+        ORDER BY t.created_at DESC;
         """;
 
     private const string SelectThemeByIdSql = """
@@ -56,6 +59,15 @@ public sealed class ThemeRepository : IThemeRepository
         WHERE theme_id = @ThemeId
         ORDER BY template_key;
         """;
+
+    // Lấy theme_code để biết đường dẫn thư mục file vật lý (wwwroot/themes/{theme_code}).
+    private const string SelectThemeCodeSql = "SELECT theme_code FROM dbo.cms_themes WHERE id = @ThemeId;";
+
+    // Đếm số site đang dùng theme làm active_theme_id (chặn xóa nếu > 0).
+    private const string CountSitesUsingThemeSql = "SELECT COUNT(1) FROM dbo.cms_sites WHERE active_theme_id = @ThemeId;";
+
+    // cms_theme_templates có FK ON DELETE CASCADE tới cms_themes => xóa theme tự xóa templates.
+    private const string DeleteThemeSql = "DELETE FROM dbo.cms_themes WHERE id = @ThemeId;";
 
     private readonly IDbConnectionFactory _factory;
 
@@ -101,13 +113,14 @@ public sealed class ThemeRepository : IThemeRepository
         }
     }
 
-    public async Task<IReadOnlyList<ThemeListItemDto>> GetThemesAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<ThemeListItemDto>> GetThemesAsync(Guid? siteId, CancellationToken ct)
     {
         using var conn = _factory.CreateConnection();
         if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
 
+        // Anonymous object: siteId null -> DBNull.Value (LEFT JOIN không khớp => IsActive = 0).
         var rows = await conn.QueryAsync<ThemeListItemDto>(new CommandDefinition(
-            SelectThemesSql, cancellationToken: ct));
+            SelectThemesSql, new { SiteId = siteId }, cancellationToken: ct));
         return rows.ToList();
     }
 
@@ -137,6 +150,29 @@ public sealed class ThemeRepository : IThemeRepository
         var rows = await conn.QueryAsync<ThemeTemplateDto>(new CommandDefinition(
             SelectTemplatesSql, new { ThemeId = themeId }, cancellationToken: ct));
         return rows.ToList();
+    }
+
+    public async Task<ThemeDeleteResult> DeleteAsync(Guid themeId, CancellationToken ct)
+    {
+        using var conn = _factory.CreateConnection();
+        if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+        // Bước 1: Lấy theme_code (để xóa file vật lý) + kiểm tra tồn tại.
+        var themeCode = await conn.ExecuteScalarAsync<string?>(new CommandDefinition(
+            SelectThemeCodeSql, new { ThemeId = themeId }, cancellationToken: ct));
+        if (themeCode is null) return new ThemeDeleteResult(ThemeDeleteStatus.NotFound, 0);
+
+        // Chặn xóa nếu theme đang là active_theme_id của bất kỳ site nào.
+        var sitesUsing = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
+            CountSitesUsingThemeSql, new { ThemeId = themeId }, cancellationToken: ct));
+        if (sitesUsing > 0) return new ThemeDeleteResult(ThemeDeleteStatus.InUse, sitesUsing, themeCode);
+
+        // Bước 2: Xóa DB (cms_theme_templates xóa theo CASCADE).
+        await conn.ExecuteAsync(new CommandDefinition(
+            DeleteThemeSql, new { ThemeId = themeId }, cancellationToken: ct));
+
+        // Trả theme_code để endpoint xóa thư mục file vật lý (Bước 3).
+        return new ThemeDeleteResult(ThemeDeleteStatus.Deleted, 0, themeCode);
     }
 
     private static DbString Ansi(string value, int length) =>

@@ -17,6 +17,7 @@ export interface ThemeListItem {
   thumbnailUrl?: string | null;
   themeVariables: string;
   createdAt: string;
+  isActive: boolean;
 }
 
 export interface ThemeTemplate {
@@ -91,18 +92,52 @@ export function parseJsonObject(raw?: string | null): Record<string, unknown> {
   }
 }
 
-/** Lấy theme đang kích hoạt (theme mới nhất) + map templateKey -> template. */
+/** Header chống cache cho mọi request public (tránh Next.js/axios trả dữ liệu cũ khi đổi URL). */
+const NO_CACHE_HEADERS = { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } as const;
+
+/** Lấy theme đang kích hoạt (isActive === true) của site; fallback theme mới nhất nếu không có cờ. */
+export async function getActiveTheme(siteId: string = PUBLIC_SITE_ID): Promise<ThemeListItem | null> {
+  try {
+    const res = await publicApi.get<ThemeListItem[]>('/api/themes', {
+      params: { siteId },
+      headers: NO_CACHE_HEADERS,
+    });
+    const themes = Array.isArray(res.data) ? res.data : [];
+    if (themes.length === 0) return null;
+    // Ưu tiên theme có isActive === true; nếu không có thì lấy theme mới nhất (phần tử đầu).
+    return themes.find((t) => t.isActive === true) ?? themes[0];
+  } catch {
+    return null;
+  }
+}
+
+/** Lấy danh sách templateKey của theme đang kích hoạt (dùng cho auto-matching route). */
+export async function getAvailableTemplates(siteId: string = PUBLIC_SITE_ID): Promise<string[]> {
+  const activeTheme = await getActiveTheme(siteId);
+  if (!activeTheme) return [];
+  try {
+    const res = await publicApi.get<ThemeTemplate[]>(`/api/themes/${activeTheme.id}/templates`, {
+      headers: NO_CACHE_HEADERS,
+    });
+    const list = Array.isArray(res.data) ? res.data : [];
+    return list.map((t) => t.templateKey);
+  } catch {
+    return [];
+  }
+}
+
+/** Lấy theme đang kích hoạt + map templateKey -> template (chỉ template của theme active). */
 export async function loadActiveTheme(): Promise<{
   theme: ThemeListItem | null;
   templates: Record<string, ThemeTemplate>;
 }> {
   try {
-    const res = await publicApi.get<ThemeListItem[]>('/api/themes');
-    const themes = Array.isArray(res.data) ? res.data : [];
-    const theme = themes.length > 0 ? themes[0] : null;
+    const theme = await getActiveTheme(PUBLIC_SITE_ID);
     if (!theme) return { theme: null, templates: {} };
 
-    const tplRes = await publicApi.get<ThemeTemplate[]>(`/api/themes/${theme.id}/templates`);
+    const tplRes = await publicApi.get<ThemeTemplate[]>(`/api/themes/${theme.id}/templates`, {
+      headers: NO_CACHE_HEADERS,
+    });
     const list = Array.isArray(tplRes.data) ? tplRes.data : [];
     const templates: Record<string, ThemeTemplate> = {};
     for (const t of list) templates[t.templateKey] = t;
@@ -117,6 +152,7 @@ export async function loadMenu(menuCode = 'primary_menu'): Promise<MenuTreeResul
   try {
     const res = await publicApi.get<MenuTreeResult>('/api/menus', {
       params: { siteId: PUBLIC_SITE_ID, menuCode },
+      headers: NO_CACHE_HEADERS,
     });
     return res.data ?? null;
   } catch {
@@ -140,6 +176,7 @@ export async function loadEntries(
         pageIndex,
         pageSize,
       },
+      headers: NO_CACHE_HEADERS,
     });
     return { items: res.data?.items ?? [], facets: res.data?.facets ?? [] };
   } catch {
@@ -157,7 +194,7 @@ export async function loadEntryDetail(entryId: string, locale = 'vi'): Promise<F
       baseData?: string | null;
       localizedData?: string | null;
       status?: string | null;
-    }>(`/api/entries/${entryId}`, { params: { locale } });
+    }>(`/api/entries/${entryId}`, { params: { locale }, headers: NO_CACHE_HEADERS });
 
     const d = res.data;
     if (!d?.id) return null;
@@ -182,6 +219,7 @@ export async function loadEntryBlocks(entryId: string, locale = 'vi'): Promise<E
   try {
     const res = await publicApi.get<EntryBlock[]>(`/api/entries/${entryId}/blocks`, {
       params: { locale },
+      headers: NO_CACHE_HEADERS,
     });
     return Array.isArray(res.data) ? res.data : [];
   } catch {

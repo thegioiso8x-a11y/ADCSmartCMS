@@ -4,16 +4,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import TemplateViewer from './components/TemplateViewer';
 import {
   Steps, Card, Upload, Button, Space, Typography, Alert, Form, Input, Tag, Result, App, Divider,
-  List, Empty, Spin, Tabs, Table, ColorPicker, Select, Row, Col,
+  List, Empty, Spin, Tabs, Table, ColorPicker, Select, Row, Col, Popconfirm,
 } from 'antd';
 import type { UploadFile, TabsProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   InboxOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined,
   ThunderboltOutlined, CloudUploadOutlined, ReloadOutlined, LayoutOutlined,
-  BgColorsOutlined, SaveOutlined, EditOutlined,
+  BgColorsOutlined, SaveOutlined, EditOutlined, DeleteOutlined,
 } from '@ant-design/icons';
 import api from '@/lib/api';
+import { useAuthStore } from '@/store/useAuthStore';
 
 const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
@@ -89,6 +90,7 @@ interface ThemeListItem {
   thumbnailUrl?: string | null;
   themeVariables: string;
   createdAt: string;
+  isActive: boolean;
 }
 
 interface ThemeVariablesFormValues {
@@ -188,6 +190,7 @@ function toThemeArray(data: unknown): ThemeListItem[] {
 
 export default function ThemesPage() {
   const { message } = App.useApp();
+  const siteId = useAuthStore((state) => state.siteId);
 
   const [current, setCurrent] = useState(0);
 
@@ -214,11 +217,11 @@ export default function ThemesPage() {
   const [savingVariables, setSavingVariables] = useState(false);
   const [variablesForm] = Form.useForm<ThemeVariablesFormValues>();
 
-  /** Tải danh sách theme (GET /api/themes). */
+  /** Tải danh sách theme (GET /api/themes?siteId=...). */
   const loadThemes = useCallback(async () => {
     setThemesLoading(true);
     try {
-      const res = await api.get<unknown>('/api/themes');
+      const res = await api.get<unknown>('/api/themes', { params: { siteId } });
       setThemes(toThemeArray(res.data));
     } catch (err: unknown) {
       message.error(getErrorMessage(err, 'Không tải được danh sách theme'));
@@ -226,7 +229,7 @@ export default function ThemesPage() {
     } finally {
       setThemesLoading(false);
     }
-  }, [message]);
+  }, [message, siteId]);
 
   useEffect(() => {
     loadThemes();
@@ -274,6 +277,27 @@ export default function ThemesPage() {
       message.error(getErrorMessage(err, 'Lưu biến giao diện thất bại'));
     } finally {
       setSavingVariables(false);
+    }
+  };
+
+  /** Xóa theme (DELETE /api/themes/{id}). Chặn nếu theme đang active (409). */
+  const handleDeleteTheme = async (record: ThemeListItem) => {
+    try {
+      await api.delete(`/api/themes/${record.id}`);
+      message.success(`Đã xóa theme "${record.themeName}"`);
+      // Nếu đang chọn theme bị xóa -> bỏ chọn.
+      if (selectedTheme?.id === record.id) {
+        setSelectedTheme(null);
+        variablesForm.resetFields();
+      }
+      await loadThemes();
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { error?: string } } };
+      if (e?.response?.status === 409) {
+        message.error(e?.response?.data?.error || 'Không thể xóa theme đang được site sử dụng.');
+      } else {
+        message.error(getErrorMessage(err, 'Xóa theme thất bại'));
+      }
     }
   };
 
@@ -722,6 +746,19 @@ export default function ThemesPage() {
       render: (v: string) => <span className="font-semibold text-slate-800">{v}</span>,
     },
     {
+      title: 'Trạng thái',
+      dataIndex: 'isActive',
+      key: 'isActive',
+      width: 140,
+      align: 'center',
+      render: (v: boolean) =>
+        v ? (
+          <Tag color="green" className="rounded-md font-semibold">Đang sử dụng</Tag>
+        ) : (
+          <Tag color="default" className="rounded-md">Chưa dùng</Tag>
+        ),
+    },
+    {
       title: 'Phiên bản',
       dataIndex: 'version',
       key: 'version',
@@ -739,17 +776,31 @@ export default function ThemesPage() {
     {
       title: 'Thao tác',
       key: 'action',
-      width: 130,
+      width: 200,
       align: 'right',
       render: (_, record) => (
-        <Button
-          type="link"
-          icon={<EditOutlined />}
-          className="font-medium"
-          onClick={() => handleSelectTheme(record)}
-        >
-          Tùy chỉnh
-        </Button>
+        <Space size="small">
+          <Button
+            type="link"
+            icon={<EditOutlined />}
+            className="font-medium"
+            onClick={() => handleSelectTheme(record)}
+          >
+            Tùy chỉnh
+          </Button>
+          <Popconfirm
+            title="Xóa theme này?"
+            description="Hành động này không thể hoàn tác. Không thể xóa theme đang được site sử dụng."
+            okText="Xóa"
+            cancelText="Hủy"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleDeleteTheme(record)}
+          >
+            <Button type="link" danger icon={<DeleteOutlined />} className="font-medium">
+              Xóa
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];

@@ -6,9 +6,14 @@ namespace AdcSmartCms.Application.Themes;
 // Idempotent: menu đã có thì bỏ qua; item khớp (menu_id, title, url) đã có thì bỏ qua.
 
 /// <summary>Một mục menu bóc tách từ HTML (đệ quy qua Children).</summary>
+/// <param name="Title">Nhãn hiển thị (text trong thẻ &lt;a&gt;).</param>
+/// <param name="Url">custom_url đã map (VD: /tin-tuc). Null nếu không có href.</param>
+/// <param name="LinkType">'custom' | 'collection' | 'entry' (theo map link tĩnh).</param>
+/// <param name="Children">Các mục con (Mega Menu).</param>
 public sealed record SeededMenuItem(
     string Title,
     string? Url,
+    string LinkType,
     IReadOnlyList<SeededMenuItem> Children);
 
 /// <summary>Một menu bóc tách từ HTML (menuCode + danh sách mục gốc).</summary>
@@ -35,3 +40,4 @@ public interface IThemeMenuSeeder
     /// <summary>Bóc tách danh sách menu (chưa ghi DB) từ 1 chuỗi HTML.</summary>
     IReadOnlyList<SeededMenu> ParseMenus(string html);
 }
+
