@@ -68,9 +68,11 @@ builder.Services.AddSingleton<IThemeParser, HtmlThemeParser>();
 builder.Services.AddSingleton(new ThemeLintOptions());
 builder.Services.AddSingleton<IThemeLinter, ZipThemeLinter>();
 builder.Services.AddSingleton<IThemeRepository, ThemeRepository>();
+builder.Services.AddSingleton<ISiteRepository, SiteRepository>();
 builder.Services.AddSingleton<IThemeImporter, ThemeImporter>();
 builder.Services.AddSingleton<IAutoSchemaGenerator, AutoSchemaGenerator>();
 builder.Services.AddSingleton<IThemeMenuSeeder, ThemeMenuSeeder>();
+builder.Services.AddSingleton<IPageBlockSeeder, PageBlockSeeder>();
 builder.Services.AddSingleton<IContentRepository, ContentRepository>();
 builder.Services.AddSingleton<IMenuRepository, MenuRepository>();
 builder.Services.AddSingleton<IFormRepository, FormRepository>();
@@ -163,6 +165,7 @@ app.MapAuthEndpoints();
 
 // Các nhóm API chính (bảo vệ JWT được gắn trực tiếp trong từng file Endpoints).
 app.MapThemeEndpoints();
+app.MapSiteEndpoints();
 app.MapContentEndpoints();
 app.MapSeoEndpoints();
 app.MapSeoRedirectEndpoints();

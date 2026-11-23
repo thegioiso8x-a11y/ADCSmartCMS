@@ -1,5 +1,11 @@
+using System.Data;
+using System.Data.Common;
 using System.IO.Compression;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using AdcSmartCms.Application.Themes;
+using AdcSmartCms.Infrastructure.Data;
+using Dapper;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AdcSmartCms.Api.Endpoints;
@@ -134,19 +140,25 @@ public static class ThemeEndpoints
             Guid? siteId,
             IAutoSchemaGenerator generator,
             IThemeMenuSeeder menuSeeder,
+            IPageBlockSeeder pageSeeder,
             CancellationToken ct) =>
         {
             var model = await generator.GenerateAsync(themeId, ct);
             if (model is null)
                 return Results.NotFound(new { error = $"Không tìm thấy theme id '{themeId}'." });
 
-            var persisted = await generator.PersistAsync(themeId, ct);
-
-            // Seed menu từ HTML của layout_master cho site (mặc định site tech_store).
+            // Resolve siteId TRƯỚC PersistAsync để content type được tạo đúng site.
             var resolvedSiteId = siteId is { } s && s != Guid.Empty
                 ? s
                 : Guid.Parse("2FD0078F-0043-4083-B34F-4BDF7BF6A604");
+
+            var persisted = await generator.PersistAsync(themeId, resolvedSiteId, ct);
+
+            // Seed menu từ HTML của layout_master cho site.
             var menuSeed = await menuSeeder.SeedFromThemeAsync(themeId, resolvedSiteId, ct);
+
+            // Seed page entries + gắn block (data-cms-block) vào cms_entry_blocks.
+            var pageSeed = await pageSeeder.SeedFromThemeAsync(themeId, resolvedSiteId, ct);
 
             return Results.Ok(new
             {
@@ -157,7 +169,57 @@ public static class ThemeEndpoints
                 contentTypes = model.ContentTypes,
                 warnings = model.Warnings,
                 persisted,
-                menuSeed
+                menuSeed,
+                pageSeed
+            });
+        });
+
+        // DEBUG (T0-FIXd): re-parse extracted_schema từ raw_html (fallback compiled_html) bằng Parser MỚI.
+        // Dùng khi Parser đã sửa (propagate ancestor collection) nhưng schema cũ trong DB chưa cập nhật.
+        // KHÔNG gọi generate-schema — admin gọi tiếp POST /api/debug/generate-schema/{themeId}.
+        app.MapPost("/api/debug/reparse-schema/{themeId:guid}", async (
+            Guid themeId,
+            IThemeParser parser,
+            IThemeRepository repo,
+            IDbConnectionFactory factory,
+            CancellationToken ct) =>
+        {
+            var templates = await repo.GetTemplatesAsync(themeId, ct);
+            if (templates.Count == 0)
+                return Results.NotFound(new { error = $"Theme '{themeId}' không có template nào." });
+
+            using var conn = factory.CreateConnection();
+            if (conn is DbConnection db) await db.OpenAsync(ct); else conn.Open();
+
+            var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            };
+
+            int reparsed = 0, fieldsTotal = 0;
+            foreach (var t in templates)
+            {
+                // raw_html = source of truth (giữ nguyên HTML gốc); fallback compiled_html cho dữ liệu cũ.
+                var raw = await conn.ExecuteScalarAsync<string?>(
+                    "SELECT COALESCE(raw_html, compiled_html) FROM dbo.cms_theme_templates WHERE id = @Id",
+                    new { Id = t.Id });
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+
+                var parsed = parser.ParseHtml(raw);
+                var json = JsonSerializer.Serialize(parsed, jsonOpts);
+                await conn.ExecuteAsync(
+                    "UPDATE dbo.cms_theme_templates SET extracted_schema = @Json WHERE id = @Id",
+                    new { Json = json, Id = t.Id });
+                reparsed++;
+                fieldsTotal += parsed.Fields.Count;
+            }
+
+            return Results.Ok(new
+            {
+                status = "Reparsed",
+                themeId,
+                templatesReparsed = reparsed,
+                fieldsExtractedTotal = fieldsTotal
             });
         });
 

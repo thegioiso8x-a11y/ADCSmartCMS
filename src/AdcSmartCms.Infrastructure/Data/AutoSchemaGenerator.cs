@@ -37,18 +37,25 @@ public sealed class AutoSchemaGenerator : IAutoSchemaGenerator
 
     private const string FindContentTypeSql = """
         SELECT id FROM dbo.cms_content_types
-        WHERE site_id IS NULL AND api_id = @ApiId;
+        WHERE ((@SiteId IS NULL AND site_id IS NULL) OR site_id = @SiteId) AND api_id = @ApiId;
         """;
 
     private const string InsertContentTypeSql = """
         INSERT INTO dbo.cms_content_types (site_id, api_id, display_name, kind)
         OUTPUT INSERTED.id
-        VALUES (NULL, @ApiId, @DisplayName, @Kind);
+        VALUES (@SiteId, @ApiId, @DisplayName, @Kind);
         """;
 
     private const string FieldExistsSql = """
         SELECT COUNT(1) FROM dbo.cms_field_definitions
         WHERE content_type_id = @ContentTypeId AND field_key = @FieldKey;
+        """;
+
+    // Cập nhật field_type khi field đã tồn tại nhưng type khác (VD: heuristic mới suy ra media/datetime).
+    private const string UpdateFieldTypeSql = """
+        UPDATE dbo.cms_field_definitions
+        SET field_type = @FieldType
+        WHERE content_type_id = @ContentTypeId AND field_key = @FieldKey AND field_type <> @FieldType;
         """;
 
     private const string InsertFieldSql = """
@@ -106,6 +113,13 @@ public sealed class AutoSchemaGenerator : IAutoSchemaGenerator
             }
         }
 
+        // Đảm bảo content type 'page' (single) tồn tại khi theme có template page_*.
+        // Page là "vỏ" cho trang tĩnh; nội dung thật nằm trong các block (cms_entry_blocks).
+        // Nếu đã có field mồ côi rơi vào 'page' thì group đã tồn tại; nếu không, tạo page rỗng.
+        var hasPageTemplate = templates.Any(t => t.TemplateKey.StartsWith("page_", StringComparison.Ordinal));
+        if (hasPageTemplate && !groups.ContainsKey("page"))
+            groups["page"] = new GroupBuilder("page", "single", DisplayNameOf("page"));
+
         var contentTypes = groups.Values
             .Select(g => new GeneratedContentType(g.ApiId, g.DisplayName, g.Kind, g.BuildFields()))
             .ToList();
@@ -115,7 +129,7 @@ public sealed class AutoSchemaGenerator : IAutoSchemaGenerator
 
     // ---------- Ghi DB ----------
 
-    public async Task<AutoSchemaPersistResult?> PersistAsync(Guid themeId, CancellationToken ct)
+    public async Task<AutoSchemaPersistResult?> PersistAsync(Guid themeId, Guid? siteId, CancellationToken ct)
     {
         var model = await GenerateAsync(themeId, ct);
         if (model is null) return null;
@@ -126,11 +140,12 @@ public sealed class AutoSchemaGenerator : IAutoSchemaGenerator
 
         int ctInserted = 0, ctSkipped = 0, fInserted = 0, fSkipped = 0;
         var ctIds = new List<Guid>();
+        var warnings = new List<string>();
 
         foreach (var contentType in model.ContentTypes)
         {
             var existingId = await conn.ExecuteScalarAsync<Guid?>(new CommandDefinition(
-                FindContentTypeSql, new { contentType.ApiId }, tx, cancellationToken: ct));
+                FindContentTypeSql, new { contentType.ApiId, SiteId = siteId }, tx, cancellationToken: ct));
 
             Guid contentTypeId;
             if (existingId is { } id)
@@ -142,6 +157,7 @@ public sealed class AutoSchemaGenerator : IAutoSchemaGenerator
             {
                 contentTypeId = await conn.ExecuteScalarAsync<Guid>(new CommandDefinition(InsertContentTypeSql, new
                 {
+                    SiteId = siteId,
                     ApiId = Ansi(contentType.ApiId, 100),
                     DisplayName = contentType.DisplayName,   // NVARCHAR(150)
                     Kind = Ansi(contentType.Kind, 30)
@@ -154,36 +170,67 @@ public sealed class AutoSchemaGenerator : IAutoSchemaGenerator
             {
                 var fieldExists = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
                     FieldExistsSql, new { ContentTypeId = contentTypeId, FieldKey = Ansi(f.FieldKey, 100) }, tx, cancellationToken: ct));
-                if (fieldExists > 0) { fSkipped++; continue; }
-
-                await conn.ExecuteAsync(new CommandDefinition(InsertFieldSql, new
+                if (fieldExists > 0)
                 {
-                    ContentTypeId = contentTypeId,
-                    FieldKey = Ansi(f.FieldKey, 100),
-                    DisplayLabel = f.DisplayLabel,   // NVARCHAR(150)
-                    FieldType = Ansi(f.FieldType, 50),
-                    f.SortOrder
-                }, tx, cancellationToken: ct));
-                fInserted++;
+                    // Field đã tồn tại: cập nhật field_type nếu khác (heuristic mới), không nhân bản.
+                    try
+                    {
+                        await conn.ExecuteAsync(new CommandDefinition(UpdateFieldTypeSql, new
+                        {
+                            ContentTypeId = contentTypeId,
+                            FieldKey = Ansi(f.FieldKey, 100),
+                            FieldType = Ansi(f.FieldType, 50)
+                        }, tx, cancellationToken: ct));
+                    }
+                    catch (Exception ex)
+                    {
+                        warnings.Add($"Field '{f.FieldKey}' update type lỗi: {ex.Message}. Bỏ qua.");
+                    }
+                    fSkipped++;
+                    continue;
+                }
+
+                // FIXc: 1 field lỗi (FK/constraint/unique) không rollback cả transaction — chỉ skip field đó.
+                try
+                {
+                    await conn.ExecuteAsync(new CommandDefinition(InsertFieldSql, new
+                    {
+                        ContentTypeId = contentTypeId,
+                        FieldKey = Ansi(f.FieldKey, 100),
+                        DisplayLabel = f.DisplayLabel,   // NVARCHAR(150)
+                        FieldType = Ansi(f.FieldType, 50),
+                        f.SortOrder
+                    }, tx, cancellationToken: ct));
+                    fInserted++;
+                }
+                catch (Exception ex)
+                {
+                    warnings.Add($"Field '{f.FieldKey}' (type '{f.FieldType}') insert lỗi: {ex.Message}. Bỏ qua.");
+                    fSkipped++;
+                }
             }
         }
 
         tx.Commit();
-        return new AutoSchemaPersistResult(ctInserted, ctSkipped, fInserted, fSkipped, ctIds);
+        return new AutoSchemaPersistResult(ctInserted, ctSkipped, fInserted, fSkipped, ctIds, warnings);
     }
 
     // ---------- Tiện ích ----------
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    /// <summary>Xác định content type chứa field: ưu tiên data-cms-collection/block trên thẻ, ngược lại theo template.</summary>
+    /// <summary>
+    /// Xác định content type chứa field: ưu tiên data-cms-collection/block trên thẻ.
+    /// KHÔNG dùng template_key làm api_id (tránh sinh content type rác list_*/detail_*/layout_master).
+    /// Field không thuộc collection/block nào -> gom vào content type 'page' (single).
+    /// </summary>
     private static (string ApiId, string Kind) ResolveGroup(ParsedField field, string templateKey)
     {
         if (field.CmsAttributes.TryGetValue("data-cms-collection", out var collection) && !string.IsNullOrWhiteSpace(collection))
             return (collection.Trim(), "collection");
         if (field.CmsAttributes.TryGetValue("data-cms-block", out var block) && !string.IsNullOrWhiteSpace(block))
             return (block.Trim(), "component");
-        return (templateKey, "single");
+        return ("page", "single");
     }
 
     private static string NormalizeFieldType(string? raw, string templateKey, string fieldKey, List<string> warnings)

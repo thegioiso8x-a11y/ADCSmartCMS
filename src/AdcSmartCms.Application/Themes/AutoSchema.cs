@@ -31,7 +31,8 @@ public sealed record AutoSchemaPersistResult(
     int ContentTypesSkipped,
     int FieldsInserted,
     int FieldsSkipped,
-    IReadOnlyList<Guid> ContentTypeIds);
+    IReadOnlyList<Guid> ContentTypeIds,
+    IReadOnlyList<string> Warnings);
 
 public interface IAutoSchemaGenerator
 {
@@ -39,5 +40,5 @@ public interface IAutoSchemaGenerator
     Task<AutoSchemaResult?> GenerateAsync(Guid themeId, CancellationToken ct);
 
     /// <summary>Ghi mô hình đã sinh vào DB trong 1 transaction. Trả null nếu theme không tồn tại.</summary>
-    Task<AutoSchemaPersistResult?> PersistAsync(Guid themeId, CancellationToken ct);
+    Task<AutoSchemaPersistResult?> PersistAsync(Guid themeId, Guid? siteId, CancellationToken ct);
 }

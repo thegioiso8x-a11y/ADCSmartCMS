@@ -150,11 +150,11 @@ public sealed class ThemeMenuSeeder : IThemeMenuSeeder
         if (fileName.Equals("index", StringComparison.OrdinalIgnoreCase))
             return ($"/{suffix}", "custom");
 
-        // list-<slug>.html -> /<slug> (collection).
+        // list-<slug>.html -> /<slug> (custom: dùng custom_url để resolveHref trỏ đúng route).
         if (fileName.StartsWith("list-", StringComparison.OrdinalIgnoreCase))
         {
             var slug = fileName["list-".Length..];
-            return ($"/{slug}{suffix}", "collection");
+            return ($"/{slug}{suffix}", "custom");
         }
 
         // detail-<slug>.html -> /<slug>/chi-tiet (custom).

@@ -11,7 +11,7 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   InboxOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined,
   ThunderboltOutlined, CloudUploadOutlined, ReloadOutlined, LayoutOutlined,
-  BgColorsOutlined, SaveOutlined, EditOutlined, DeleteOutlined,
+  BgColorsOutlined, SaveOutlined, EditOutlined, DeleteOutlined, CheckOutlined,
 } from '@ant-design/icons';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -298,6 +298,17 @@ export default function ThemesPage() {
       } else {
         message.error(getErrorMessage(err, 'Xóa theme thất bại'));
       }
+    }
+  };
+
+  /** Kích hoạt theme cho site (PUT /api/sites/{siteId}/active-theme). */
+  const handleActivateTheme = async (record: ThemeListItem) => {
+    try {
+      await api.put(`/api/sites/${siteId}/active-theme`, { themeId: record.id });
+      message.success('Kích hoạt giao diện thành công');
+      await loadThemes();
+    } catch (err: unknown) {
+      message.error(getErrorMessage(err, 'Kích hoạt giao diện thất bại'));
     }
   };
 
@@ -776,10 +787,24 @@ export default function ThemesPage() {
     {
       title: 'Thao tác',
       key: 'action',
-      width: 200,
+      width: 300,
       align: 'right',
       render: (_, record) => (
         <Space size="small">
+          {record.isActive ? (
+            <Button type="link" disabled icon={<CheckOutlined />} className="font-medium">
+              Đang dùng
+            </Button>
+          ) : (
+            <Button
+              type="link"
+              icon={<CheckOutlined />}
+              className="font-medium !text-emerald-600"
+              onClick={() => handleActivateTheme(record)}
+            >
+              Kích hoạt
+            </Button>
+          )}
           <Button
             type="link"
             icon={<EditOutlined />}

@@ -21,7 +21,8 @@ public sealed class ContentRepository : IContentRepository
     // Content type có thể dùng chung (site_id IS NULL) hoặc riêng của site (site_id = @SiteId).
     // @SiteId NULL => chỉ lấy loại dùng chung; có giá trị => lấy cả dùng chung lẫn riêng của site đó.
     private const string SelectContentTypesSql = """
-        SELECT id AS Id, api_id AS ApiId, display_name AS DisplayName, kind AS Kind
+        SELECT id AS Id, api_id AS ApiId, display_name AS DisplayName, kind AS Kind,
+               route_slug AS RouteSlug
         FROM dbo.cms_content_types
         WHERE site_id IS NULL OR site_id = @SiteId
         ORDER BY api_id;

@@ -12,6 +12,7 @@ import {
   loadEntries,
   loadEntryBlocks,
   findEntryBySlug,
+  loadRouteSlugMap,
   parseJsonObject,
   type FilteredEntryItem,
   type MenuTreeResult,
@@ -63,7 +64,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   // Chi tiết: slug có >= 2 segment -> segment cuối là slug bài viết.
   if (slug.length >= 2) {
-    const entry = await findEntryBySlug(slug[0], slug[slug.length - 1]);
+    const routeSlugMap = await loadRouteSlugMap();
+    const rawFirst = (slug[0] ?? '').toLowerCase();
+    const contentTypeApiId = routeSlugMap[rawFirst] ?? slug[0];
+    const entry = await findEntryBySlug(contentTypeApiId, slug[slug.length - 1]);
     if (entry) {
       const seo = parseJsonObject(entry.seoMeta);
       const title = (seo.meta_title as string) || entry.title || 'ADC Smart CMS';
@@ -79,10 +83,11 @@ export default async function PublicPage({ params }: PageProps) {
   const { slug = [] } = await params;
   // 1) Theme + templates + menu (song song để giảm thời gian chờ).
   //    getAvailableTemplates: danh sách templateKey của theme đang active (dùng cho auto-matching route).
-  const [{ theme, templates }, availableTemplateKeys, menu] = await Promise.all([
+  const [{ theme, templates }, availableTemplateKeys, menu, routeSlugMap] = await Promise.all([
     loadActiveTheme(),
     getAvailableTemplates(),
     loadMenu('primary_menu'),
+    loadRouteSlugMap(),
   ]);
 
   // Chỉ giữ template thuộc theme đang active (nếu có danh sách) để auto-matching không lẫn theme khác.
@@ -93,13 +98,17 @@ export default async function PublicPage({ params }: PageProps) {
         )
       : templates;
 
-  const templateKey = resolveTemplateKey(slug, activeTemplates);
+  const templateKey = resolveTemplateKey(slug, activeTemplates, routeSlugMap);
   const template = pickTemplate(activeTemplates, templateKey);
   const assetsBaseUrl = theme?.assetsBaseUrl ?? '';
 
   const isHome = slug.length === 0;
   const isDetail = slug.length >= 2;
   const isList = slug.length === 1;
+
+  // Resolve content type api_id từ segment đầu (hỗ trợ alias route_slug: 'tin-tuc' -> 'news').
+  const rawFirst = (slug[0] ?? '').toLowerCase();
+  const contentTypeApiId = routeSlugMap[rawFirst] ?? slug[0] ?? '';
 
   // 2) Chuẩn bị dữ liệu theo loại trang (tổng quát, không hardcode content type).
   let pageData: Record<string, unknown> = {};
@@ -124,18 +133,16 @@ export default async function PublicPage({ params }: PageProps) {
       home_services: blocks.find((b) => b.zone_key === 'home_services') ?? {},
     };
   } else if (isList) {
-    // Danh sách: dùng segment đầu làm content type api_id.
-    const contentType = slug[0];
-    const { items } = await loadEntries(contentType, 1, 20);
+    // Danh sách: dùng content type api_id (đã resolve alias route_slug).
+    const { items } = await loadEntries(contentTypeApiId, 1, 20);
     pageData = {
-      page_title: contentType,
+      page_title: contentTypeApiId,
       total: items.length > 0 ? items[0].totalRecords : 0,
       entries: items.map(entryToLiquidData),
     };
   } else if (isDetail) {
-    // Chi tiết: segment đầu = content type, segment cuối = slug bài viết.
-    const contentType = slug[0];
-    const entry = await findEntryBySlug(contentType, slug[slug.length - 1]);
+    // Chi tiết: content type api_id (đã resolve alias), segment cuối = slug bài viết.
+    const entry = await findEntryBySlug(contentTypeApiId, slug[slug.length - 1]);
     pageData = {
       page_title: entry?.title ?? 'Không tìm thấy bài viết',
       entry: entry ? entryToLiquidData(entry) : null,

@@ -147,6 +147,37 @@ export async function loadActiveTheme(): Promise<{
   }
 }
 
+/** Một content type (khớp DTO backend GET /api/content-types). */
+export interface ContentTypeItem {
+  id: string;
+  apiId: string;
+  displayName: string;
+  kind: string;
+  routeSlug?: string | null;
+}
+
+/**
+ * Lấy map route_slug (alias SEO) -> api_id từ danh sách content type của site.
+ * VD: { 'tin-tuc': 'news', 'dich-vu': 'service' }.
+ * Dùng để resolve route theo alias trước khi dò template (list_news/detail_news).
+ */
+export async function loadRouteSlugMap(siteId: string = PUBLIC_SITE_ID): Promise<Record<string, string>> {
+  try {
+    const res = await publicApi.get<ContentTypeItem[]>('/api/content-types', {
+      params: { siteId },
+      headers: NO_CACHE_HEADERS,
+    });
+    const list = Array.isArray(res.data) ? res.data : [];
+    const map: Record<string, string> = {};
+    for (const ct of list) {
+      if (ct.routeSlug && ct.apiId) map[ct.routeSlug.toLowerCase()] = ct.apiId;
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
 /** Lấy cây menu theo menuCode (mặc định 'primary_menu'). */
 export async function loadMenu(menuCode = 'primary_menu'): Promise<MenuTreeResult | null> {
   try {

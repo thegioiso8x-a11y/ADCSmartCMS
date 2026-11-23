@@ -29,11 +29,14 @@ function pluralVariants(key: string): string[] {
  * Dò templateKey phù hợp với slug.
  * @param slug Mảng segment của URL (rỗng = trang chủ).
  * @param templates Map templateKey -> template của theme đang active.
+ * @param routeSlugMap Map route_slug (alias SEO) -> api_id. VD { 'tin-tuc': 'news' }.
+ *        Nếu segment đầu khớp route_slug, dùng api_id tương ứng để dò template (list_news/detail_news).
  * @returns templateKey khớp, hoặc null nếu không tìm thấy.
  */
 export function resolveTemplateKey(
   slug: string[],
-  templates: Record<string, ThemeTemplate>
+  templates: Record<string, ThemeTemplate>,
+  routeSlugMap: Record<string, string> = {}
 ): string | null {
   // 1) Trang chủ.
   if (slug.length === 0) {
@@ -42,7 +45,11 @@ export function resolveTemplateKey(
     return null;
   }
 
-  const first = normalizeKey(slug[0]);
+  // 1.5) Alias SEO: nếu segment đầu là route_slug -> dùng api_id thật để dò template.
+  const rawFirst = normalizeKey(slug[0]);
+  const aliasedFirst = routeSlugMap[rawFirst] ?? routeSlugMap[slug[0]] ?? rawFirst;
+
+  const first = normalizeKey(aliasedFirst);
   const last = normalizeKey(slug[slug.length - 1]);
   const isDetail = slug.length >= 2;
 

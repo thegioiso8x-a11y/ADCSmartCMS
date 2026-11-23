@@ -11,7 +11,8 @@ public sealed record ContentTypeDto(
     Guid Id,
     string ApiId,
     string DisplayName,
-    string Kind);
+    string Kind,
+    string? RouteSlug = null);
 
 /// <summary>Một định nghĩa trường động (bảng cms_field_definitions).</summary>
 public sealed record FieldDefinitionDto(

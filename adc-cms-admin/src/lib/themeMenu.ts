@@ -33,7 +33,8 @@ function resolveLabel(item: MenuItemNode, locale = 'vi'): string {
 
 /** Xác định href của 1 mục menu (tổng quát, không hardcode content type). */
 function resolveHref(item: MenuItemNode): string {
-  if (item.linkType === 'custom' && item.customUrl) return item.customUrl;
+  // Ưu tiên customUrl đã lưu (đúng route thực tế), bất kể linkType.
+  if (item.customUrl) return item.customUrl;
   if (item.linkType === 'entry' && item.targetEntryId) return `/${item.targetEntryId}`;
   if (item.linkType === 'collection') return '/';
   return '#';
