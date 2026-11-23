@@ -31,3 +31,15 @@ yarn-error.log*
 *.swp
 # --- Temp ---
 tmp/
+
+# ═══════════════════════════════════════════
+# THEME IMPORT ARTIFACTS
+# ═══════════════════════════════════════════
+src/AdcSmartCms.Api/wwwroot/themes/
+src/AdcSmartCms.Api/wwwroot/uploads/
+
+# Build artifacts
+**/bin/
+**/obj/
+adc-cms-admin/.next/
+adc-cms-admin/node_modules/
